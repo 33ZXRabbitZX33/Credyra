@@ -178,6 +178,25 @@ button{font-family:var(--font-body);cursor:pointer}
 .inst-row .inst-del{background:none;border:1px solid var(--line);color:var(--text-faint);cursor:pointer;border-radius:3px;padding:8px 10px;flex:0 0 auto}
 .inst-row .inst-del:hover{color:var(--red);border-color:var(--red)}
 .field-hint{font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:10px;font-family:var(--font-mono)}
+
+/* nav tabs */
+.navtabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--line)}
+.navtab{background:none;border:none;color:var(--text-dim);font-family:var(--font-display);font-size:13px;letter-spacing:1px;text-transform:uppercase;padding:10px 6px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+.navtab:hover{color:var(--text)}
+.navtab.active{color:var(--mint);border-bottom-color:var(--mint)}
+
+/* fixed expenses */
+.expense-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer}
+.expense-item:last-child{border-bottom:none}
+.expense-item:hover .expense-name{color:var(--mint)}
+.expense-left{min-width:0}
+.expense-name{font-family:var(--font-display);letter-spacing:.3px}
+.expense-note{color:var(--text-dim);font-size:12px;margin-top:2px}
+.expense-right{text-align:right;flex-shrink:0}
+.expense-amt{font-family:var(--font-mono);font-weight:600;display:block}
+.expense-due{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px}
+.expense-due.soon{color:var(--amber)}
+.expense-due.over{color:var(--red)}
 </style>
 </head>
 <body>
@@ -196,23 +215,37 @@ button{font-family:var(--font-body);cursor:pointer}
     </div>
   </header>
 
-  <div class="stats" id="statGrid"></div>
-
-  <div class="section-label"><span class="idx">01</span><h2>Thẻ tín dụng & ví trả sau</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit')">+ Thêm thẻ</button></div>
-  <div class="frame"><div class="credit-grid" id="creditGrid"></div></div>
-
-  <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
-  <div class="frame">
-    <div id="loanFacilities"></div>
-    <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
-    <div id="loanRows"></div>
+  <div class="navtabs">
+    <button class="navtab active" data-tab="dashboard" onclick="switchTab('dashboard')">Tổng quan</button>
+    <button class="navtab" data-tab="expenses" onclick="switchTab('expenses')">Chi phí cố định</button>
   </div>
 
-  <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
-  <div class="frame"><div class="wallet-grid" id="walletGrid"></div></div>
+  <div id="tabDashboard" class="tabpage">
+    <div class="stats" id="statGrid"></div>
 
-  <div class="section-label"><span class="idx">04</span><h2>Giao dịch gần đây</h2><div class="rule"></div></div>
-  <div class="frame" id="txList"></div>
+    <div class="section-label"><span class="idx">01</span><h2>Thẻ tín dụng & ví trả sau</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit')">+ Thêm thẻ</button></div>
+    <div class="frame"><div class="credit-grid" id="creditGrid"></div></div>
+
+    <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
+    <div class="frame">
+      <div id="loanFacilities"></div>
+      <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
+      <div id="loanRows"></div>
+    </div>
+
+    <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
+    <div class="frame"><div class="wallet-grid" id="walletGrid"></div></div>
+
+    <div class="section-label"><span class="idx">04</span><h2>Giao dịch gần đây</h2><div class="rule"></div></div>
+    <div class="frame" id="txList"></div>
+  </div>
+
+  <div id="tabExpenses" class="tabpage" style="display:none">
+    <div class="stats" id="expenseStatGrid"></div>
+
+    <div class="section-label"><span class="idx">01</span><h2>Chi phí cố định hàng tháng</h2><div class="rule"></div><button class="btn small ghost" onclick="openExpenseModal()">+ Thêm chi phí</button></div>
+    <div class="frame" id="expenseList"></div>
+  </div>
 </div>
 
 <button class="fab" onclick="openTxModal()" aria-label="Thêm giao dịch">+</button>
@@ -302,6 +335,36 @@ button{font-family:var(--font-body);cursor:pointer}
   </div>
 </div>
 
+<div class="overlay" id="expOverlay">
+  <div class="modal">
+    <h3 id="expModalTitle">Thêm chi phí cố định</h3>
+    <div class="field">
+      <label>Tên</label>
+      <input type="text" id="expName" placeholder="VD: Tiền nhà, Netflix...">
+      <div class="err" id="expNameErr">Nhập tên chi phí</div>
+    </div>
+    <div class="field">
+      <label>Số tiền / tháng (VNĐ)</label>
+      <input type="number" id="expAmount" min="0">
+      <div class="err" id="expAmountErr">Nhập số tiền hợp lệ</div>
+    </div>
+    <div class="field">
+      <label>Ngày thanh toán hàng tháng</label>
+      <input type="number" id="expDueDay" min="1" max="31" placeholder="VD: 5">
+      <div class="err" id="expDueDayErr">Nhập ngày từ 1 đến 31</div>
+    </div>
+    <div class="field">
+      <label>Ghi chú (tuỳ chọn)</label>
+      <input type="text" id="expNote" placeholder="VD: gói năm, trừ qua thẻ Momo...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn danger" id="expDeleteBtn" onclick="deleteExpenseBtn()" style="display:none;margin-right:auto">Xóa</button>
+      <button class="btn ghost" onclick="closeExpenseModal()">Hủy</button>
+      <button class="btn primary" onclick="submitExpense()">Lưu</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORE_KEY = 'nexus_finance_state_v1';
 const fmt = n => Math.round(n).toLocaleString('vi-VN') + '₫';
@@ -333,15 +396,20 @@ function seed(){
       {id:'t1', accountId:'a2', type:'expense', amount:850000, note:'Mua sắm online', date:addDays(-1)},
       {id:'t2', accountId:'a1', type:'expense', amount:120000, note:'Cà phê', date:addDays(-2)},
       {id:'t3', accountId:'a3', type:'repay', amount:2100000, note:'Trả kỳ tháng trước', date:addDays(-5)},
-    ]
+    ],
+    expenses: []
   };
 }
 function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 
 let state = load();
 function load(){
-  try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : seed(); }
-  catch(e){ return seed(); }
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    const s = raw ? JSON.parse(raw) : seed();
+    if(!s.expenses) s.expenses = [];
+    return s;
+  } catch(e){ return seed(); }
 }
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 function resetToSeed(){
@@ -371,6 +439,14 @@ function render(){
   renderWallets();
   renderTx();
   renderTxAccountOptions();
+  renderExpenses();
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tabpage').forEach(p=>p.style.display='none');
+  document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).style.display = 'block';
+  document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelector('.fab').style.display = tab==='dashboard' ? '' : 'none';
 }
 
 function renderClock(){
@@ -582,6 +658,93 @@ function renderTx(){
       </div>
     </div>`;
   }).join('') || '<div class="empty">Chưa có giao dịch nào</div>';
+}
+
+/* ---- fixed monthly expenses ---- */
+function nextDueFromDay(day){
+  const now = new Date();
+  let y = now.getFullYear(), m = now.getMonth();
+  let candidate = new Date(y, m, day).toISOString().slice(0,10);
+  if(candidate < todayISO()){
+    candidate = new Date(y, m+1, day).toISOString().slice(0,10);
+  }
+  return candidate;
+}
+
+function renderExpenses(){
+  const expenses = state.expenses || [];
+  const total = expenses.reduce((s,e)=>s+e.amount, 0);
+  document.getElementById('expenseStatGrid').innerHTML = `
+    <div class="stat neg"><div class="lbl">Tổng chi phí cố định / tháng</div><div class="val">${fmt(total)}</div></div>
+  `;
+
+  const sorted = [...expenses].sort((a,b)=> daysUntil(nextDueFromDay(a.dueDay)) - daysUntil(nextDueFromDay(b.dueDay)));
+  document.getElementById('expenseList').innerHTML = sorted.map(e=>{
+    const d = daysUntil(nextDueFromDay(e.dueDay));
+    const dueLabel = d < 0 ? 'Quá hạn' : d === 0 ? 'Hôm nay' : `Còn ${d} ngày`;
+    const dueCls = d < 0 ? 'over' : d <= 3 ? 'soon' : '';
+    return `
+    <div class="expense-item" onclick="openExpenseModal('${e.id}')">
+      <div class="expense-left">
+        <div class="expense-name">${e.name}</div>
+        ${e.note ? `<div class="expense-note">${e.note}</div>` : ''}
+      </div>
+      <div class="expense-right">
+        <span class="expense-amt">${fmt(e.amount)}</span>
+        <span class="expense-due ${dueCls}">${dueLabel} · ngày ${e.dueDay}</span>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Chưa có chi phí cố định nào</div>';
+}
+
+let editingExpenseId = null;
+function openExpenseModal(id){
+  editingExpenseId = id || null;
+  const e = editingExpenseId ? state.expenses.find(x=>x.id===editingExpenseId) : null;
+  document.getElementById('expModalTitle').textContent = e ? 'Sửa chi phí cố định' : 'Thêm chi phí cố định';
+  document.getElementById('expDeleteBtn').style.display = e ? 'block' : 'none';
+  document.getElementById('expName').value = e ? e.name : '';
+  document.getElementById('expAmount').value = e ? e.amount : '';
+  document.getElementById('expDueDay').value = e ? e.dueDay : '';
+  document.getElementById('expNote').value = e ? (e.note || '') : '';
+  document.getElementById('expNameErr').style.display = 'none';
+  document.getElementById('expAmountErr').style.display = 'none';
+  document.getElementById('expDueDayErr').style.display = 'none';
+  document.getElementById('expOverlay').classList.add('open');
+}
+function closeExpenseModal(){ document.getElementById('expOverlay').classList.remove('open'); editingExpenseId = null; }
+function submitExpense(){
+  const name = document.getElementById('expName').value.trim();
+  const amount = parseFloat(document.getElementById('expAmount').value);
+  const dueDay = parseInt(document.getElementById('expDueDay').value, 10);
+  const note = document.getElementById('expNote').value.trim();
+
+  let hasError = false;
+  if(!name){ document.getElementById('expNameErr').style.display = 'block'; hasError = true; }
+  else document.getElementById('expNameErr').style.display = 'none';
+  if(!amount || amount <= 0){ document.getElementById('expAmountErr').style.display = 'block'; hasError = true; }
+  else document.getElementById('expAmountErr').style.display = 'none';
+  if(!dueDay || dueDay < 1 || dueDay > 31){ document.getElementById('expDueDayErr').style.display = 'block'; hasError = true; }
+  else document.getElementById('expDueDayErr').style.display = 'none';
+  if(hasError) return;
+
+  const existing = editingExpenseId ? state.expenses.find(x=>x.id===editingExpenseId) : null;
+  if(existing){
+    Object.assign(existing, {name, amount, dueDay, note});
+  } else {
+    state.expenses.push({id:'e'+Date.now(), name, amount, dueDay, note});
+  }
+  save();
+  render();
+  closeExpenseModal();
+}
+function deleteExpenseBtn(){
+  if(!editingExpenseId) return;
+  if(!confirm('Xóa chi phí cố định này?')) return;
+  state.expenses = state.expenses.filter(x=>x.id!==editingExpenseId);
+  save();
+  render();
+  closeExpenseModal();
 }
 
 /* ---- transaction modal ---- */
