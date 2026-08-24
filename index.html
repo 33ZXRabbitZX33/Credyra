@@ -374,16 +374,16 @@ function renderStats(){
   `).join('');
 }
 
-function ringColor(pct){
-  if(pct >= 85) return 'var(--red)';
-  if(pct >= 60) return 'var(--amber)';
+function ringColor(availablePct){
+  if(availablePct <= 15) return 'var(--red)';
+  if(availablePct <= 40) return 'var(--amber)';
   return 'var(--mint)';
 }
 
 function renderCredit(){
   const credits = state.accounts.filter(a=>a.type==='credit');
   document.getElementById('creditGrid').innerHTML = credits.map(a=>{
-    const pct = Math.min(100, Math.round((a.used/a.limit)*100));
+    const pct = Math.max(0, Math.min(100, Math.round(((a.limit - a.used)/a.limit)*100)));
     const r = 26, c = 2*Math.PI*r;
     const offset = c - (pct/100)*c;
     const color = ringColor(pct);
