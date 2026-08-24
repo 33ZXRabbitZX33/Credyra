@@ -344,14 +344,22 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="err" id="expNameErr">Nhập tên chi phí</div>
     </div>
     <div class="field">
-      <label>Số tiền / tháng (VNĐ)</label>
+      <label>Số tiền mỗi lần thanh toán (VNĐ)</label>
       <input type="number" id="expAmount" min="0">
       <div class="err" id="expAmountErr">Nhập số tiền hợp lệ</div>
     </div>
     <div class="field">
-      <label>Ngày thanh toán hàng tháng</label>
-      <input type="number" id="expDueDay" min="1" max="31" placeholder="VD: 5">
-      <div class="err" id="expDueDayErr">Nhập ngày từ 1 đến 31</div>
+      <label>Chu kỳ thanh toán</label>
+      <select id="expCycle">
+        <option value="1">Hàng tháng</option>
+        <option value="3">3 tháng / lần</option>
+        <option value="12">Hàng năm</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Ngày thanh toán (gần nhất hoặc sắp tới)</label>
+      <input type="date" id="expAnchorDate">
+      <div class="err" id="expAnchorDateErr">Chọn một ngày thanh toán</div>
     </div>
     <div class="field">
       <label>Ghi chú (tuỳ chọn)</label>
@@ -660,27 +668,46 @@ function renderTx(){
   }).join('') || '<div class="empty">Chưa có giao dịch nào</div>';
 }
 
-/* ---- fixed monthly expenses ---- */
-function nextDueFromDay(day){
-  const now = new Date();
-  let y = now.getFullYear(), m = now.getMonth();
-  let candidate = new Date(y, m, day).toISOString().slice(0,10);
-  if(candidate < todayISO()){
-    candidate = new Date(y, m+1, day).toISOString().slice(0,10);
+/* ---- fixed recurring expenses (monthly / quarterly / yearly) ---- */
+function cycleLabel(months){
+  if(months===1) return 'Hàng tháng';
+  if(months===3) return '3 tháng/lần';
+  if(months===12) return 'Hàng năm';
+  return `${months} tháng/lần`;
+}
+function localDateStr(d){
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+function nextDueFromAnchor(anchorDate, cycleMonths){
+  const [ay, amo, ad] = anchorDate.split('-').map(Number);
+  let m = amo - 1;
+  let candidate = localDateStr(new Date(ay, m, ad));
+  let guard = 0;
+  while(candidate < todayISO() && guard < 500){
+    m += cycleMonths;
+    candidate = localDateStr(new Date(ay, m, ad));
+    guard++;
   }
   return candidate;
 }
 
 function renderExpenses(){
   const expenses = state.expenses || [];
-  const total = expenses.reduce((s,e)=>s+e.amount, 0);
+  // normalize each expense to a monthly-equivalent cost so quarterly/yearly
+  // items don't overstate the per-month total
+  const monthlyTotal = expenses.reduce((s,e)=>s+(e.amount/(e.cycleMonths||1)),0);
   document.getElementById('expenseStatGrid').innerHTML = `
-    <div class="stat neg"><div class="lbl">Tổng chi phí cố định / tháng</div><div class="val">${fmt(total)}</div></div>
+    <div class="stat neg"><div class="lbl">Tổng chi phí cố định (quy đổi/tháng)</div><div class="val">${fmt(monthlyTotal)}</div></div>
   `;
 
-  const sorted = [...expenses].sort((a,b)=> daysUntil(nextDueFromDay(a.dueDay)) - daysUntil(nextDueFromDay(b.dueDay)));
+  const sorted = [...expenses].sort((a,b)=>
+    daysUntil(nextDueFromAnchor(a.anchorDate, a.cycleMonths||1)) - daysUntil(nextDueFromAnchor(b.anchorDate, b.cycleMonths||1)));
   document.getElementById('expenseList').innerHTML = sorted.map(e=>{
-    const d = daysUntil(nextDueFromDay(e.dueDay));
+    const cycleMonths = e.cycleMonths || 1;
+    const nextDue = nextDueFromAnchor(e.anchorDate, cycleMonths);
+    const d = daysUntil(nextDue);
     const dueLabel = d < 0 ? 'Quá hạn' : d === 0 ? 'Hôm nay' : `Còn ${d} ngày`;
     const dueCls = d < 0 ? 'over' : d <= 3 ? 'soon' : '';
     return `
@@ -691,7 +718,7 @@ function renderExpenses(){
       </div>
       <div class="expense-right">
         <span class="expense-amt">${fmt(e.amount)}</span>
-        <span class="expense-due ${dueCls}">${dueLabel} · ngày ${e.dueDay}</span>
+        <span class="expense-due ${dueCls}">${dueLabel} · ${cycleLabel(cycleMonths)}</span>
       </div>
     </div>`;
   }).join('') || '<div class="empty">Chưa có chi phí cố định nào</div>';
@@ -705,18 +732,20 @@ function openExpenseModal(id){
   document.getElementById('expDeleteBtn').style.display = e ? 'block' : 'none';
   document.getElementById('expName').value = e ? e.name : '';
   document.getElementById('expAmount').value = e ? e.amount : '';
-  document.getElementById('expDueDay').value = e ? e.dueDay : '';
+  document.getElementById('expCycle').value = e ? e.cycleMonths : '1';
+  document.getElementById('expAnchorDate').value = e ? e.anchorDate : '';
   document.getElementById('expNote').value = e ? (e.note || '') : '';
   document.getElementById('expNameErr').style.display = 'none';
   document.getElementById('expAmountErr').style.display = 'none';
-  document.getElementById('expDueDayErr').style.display = 'none';
+  document.getElementById('expAnchorDateErr').style.display = 'none';
   document.getElementById('expOverlay').classList.add('open');
 }
 function closeExpenseModal(){ document.getElementById('expOverlay').classList.remove('open'); editingExpenseId = null; }
 function submitExpense(){
   const name = document.getElementById('expName').value.trim();
   const amount = parseFloat(document.getElementById('expAmount').value);
-  const dueDay = parseInt(document.getElementById('expDueDay').value, 10);
+  const cycleMonths = parseInt(document.getElementById('expCycle').value, 10);
+  const anchorDate = document.getElementById('expAnchorDate').value;
   const note = document.getElementById('expNote').value.trim();
 
   let hasError = false;
@@ -724,15 +753,15 @@ function submitExpense(){
   else document.getElementById('expNameErr').style.display = 'none';
   if(!amount || amount <= 0){ document.getElementById('expAmountErr').style.display = 'block'; hasError = true; }
   else document.getElementById('expAmountErr').style.display = 'none';
-  if(!dueDay || dueDay < 1 || dueDay > 31){ document.getElementById('expDueDayErr').style.display = 'block'; hasError = true; }
-  else document.getElementById('expDueDayErr').style.display = 'none';
+  if(!anchorDate){ document.getElementById('expAnchorDateErr').style.display = 'block'; hasError = true; }
+  else document.getElementById('expAnchorDateErr').style.display = 'none';
   if(hasError) return;
 
   const existing = editingExpenseId ? state.expenses.find(x=>x.id===editingExpenseId) : null;
   if(existing){
-    Object.assign(existing, {name, amount, dueDay, note});
+    Object.assign(existing, {name, amount, cycleMonths, anchorDate, note});
   } else {
-    state.expenses.push({id:'e'+Date.now(), name, amount, dueDay, note});
+    state.expenses.push({id:'e'+Date.now(), name, amount, cycleMonths, anchorDate, note});
   }
   save();
   render();
