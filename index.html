@@ -104,6 +104,13 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .loan-progress div{height:100%;background:var(--violet)}
 .mono{font-family:var(--font-mono)}
 
+/* loan facility summary */
+.facility-item{margin-bottom:14px}
+.facility-item .fname{font-family:var(--font-display);font-size:13px;letter-spacing:.3px;margin-bottom:4px}
+.facility-item .fnums{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);margin-bottom:6px}
+.facility-bar{height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden}
+.facility-bar div{height:100%}
+
 /* wallet */
 .wallet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
 .wallet-card .name{font-family:var(--font-display);font-size:14px;margin-bottom:6px}
@@ -187,6 +194,7 @@ button{font-family:var(--font-body);cursor:pointer}
 
   <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
   <div class="frame">
+    <div id="loanFacilities"></div>
     <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
     <div id="loanRows"></div>
   </div>
@@ -256,6 +264,13 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="field"><label>Số kỳ đã trả</label><input type="number" id="accPaidTerms" min="0"></div>
       <div class="field"><label>Lãi mỗi kỳ (VNĐ)</label><input type="number" id="accRate" min="0"></div>
       <div class="field"><label>Ngày đến hạn kỳ tới</label><input type="date" id="accLoanDue"></div>
+      <div class="field">
+        <label>Hạn mức tín chấp chung (tuỳ chọn)</label>
+        <div class="field-hint">Dùng cho vay tín chấp trả góp nhiều lần như SEasy — nơi các khoản vay dùng chung 1 hạn mức. Bỏ trống nếu đây là khoản vay riêng lẻ.</div>
+        <input type="text" id="accFacilityName" placeholder="VD: SEasy" style="margin-bottom:8px">
+        <input type="number" id="accFacilityLimit" min="0" placeholder="Tổng hạn mức (VNĐ)" style="margin-bottom:8px">
+        <input type="number" id="accFacilityAvailable" min="0" placeholder="Hạn mức khả dụng hiện tại (VNĐ)">
+      </div>
     </div>
     <div id="accFieldsWallet" class="acc-fields">
       <div class="field"><label>Số dư hiện tại (VNĐ)</label><input type="number" id="accBalance" min="0"></div>
@@ -284,9 +299,12 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:2, rate:3993010, due:'2026-09-05'},
-      {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:2, rate:199651, due:'2026-09-10'},
-      {id:'a8', type:'loan', name:'SEasy #3 (24tr, 26/06)', totalTerms:9, paidTerms:2, rate:3439494, due:'2026-08-26'},
+      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:2, rate:3993010, due:'2026-09-05',
+        facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:15664570},
+      {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:2, rate:199651, due:'2026-09-10',
+        facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:15664570},
+      {id:'a8', type:'loan', name:'SEasy #3 (24tr, 26/06)', totalTerms:9, paidTerms:2, rate:3439494, due:'2026-08-26',
+        facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:15664570},
     ],
     transactions: [
       {id:'t1', accountId:'a2', type:'expense', amount:850000, note:'Mua sắm online', date:addDays(-1)},
@@ -417,6 +435,26 @@ function renderCredit(){
 
 function renderLoans(){
   const loans = state.accounts.filter(a=>a.type==='loan');
+
+  const facilities = [];
+  const seenFacilities = new Set();
+  loans.forEach(a=>{
+    if(a.facilityName && !seenFacilities.has(a.facilityName)){
+      seenFacilities.add(a.facilityName);
+      facilities.push({name:a.facilityName, limit:a.facilityLimit || 0, available:a.facilityAvailable || 0});
+    }
+  });
+  document.getElementById('loanFacilities').innerHTML = facilities.map(f=>{
+    const pct = f.limit > 0 ? Math.max(0, Math.min(100, Math.round((f.available/f.limit)*100))) : 0;
+    const color = ringColor(pct);
+    return `
+    <div class="facility-item">
+      <div class="fname">${f.name}</div>
+      <div class="fnums">Khả dụng ${fmt(f.available)} / ${fmt(f.limit)}</div>
+      <div class="facility-bar"><div style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+  }).join('');
+
   document.getElementById('loanRows').innerHTML = loans.map(a=>{
     const pct = Math.round((a.paidTerms/a.totalTerms)*100);
     const d = daysUntil(a.due);
@@ -596,6 +634,9 @@ function openAccountModal(type, id){
     document.getElementById('accPaidTerms').value = acc ? acc.paidTerms : '';
     document.getElementById('accRate').value = acc ? acc.rate : '';
     document.getElementById('accLoanDue').value = acc ? acc.due : '';
+    document.getElementById('accFacilityName').value = acc ? (acc.facilityName || '') : '';
+    document.getElementById('accFacilityLimit').value = acc ? (acc.facilityLimit ?? '') : '';
+    document.getElementById('accFacilityAvailable').value = acc ? (acc.facilityAvailable ?? '') : '';
   } else {
     document.getElementById('accBalance').value = acc ? acc.balance : '';
   }
@@ -624,11 +665,15 @@ function submitAccount(){
       due: document.getElementById('accDue').value || todayISO(),
       installments};
   } else if(currentAccType==='loan'){
+    const facilityName = document.getElementById('accFacilityName').value.trim();
     acc = {id, type:'loan', name,
       totalTerms: parseFloat(document.getElementById('accTotalTerms').value) || 1,
       paidTerms: parseFloat(document.getElementById('accPaidTerms').value) || 0,
       rate: parseFloat(document.getElementById('accRate').value) || 0,
       due: document.getElementById('accLoanDue').value || todayISO()};
+    acc.facilityName = facilityName || undefined;
+    acc.facilityLimit = facilityName ? (parseFloat(document.getElementById('accFacilityLimit').value) || 0) : undefined;
+    acc.facilityAvailable = facilityName ? (parseFloat(document.getElementById('accFacilityAvailable').value) || 0) : undefined;
   } else {
     acc = {id, type:'wallet', name,
       balance: parseFloat(document.getElementById('accBalance').value) || 0};
