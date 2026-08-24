@@ -238,7 +238,11 @@ button{font-family:var(--font-body);cursor:pointer}
     </div>
     <div id="accFieldsCredit" class="acc-fields">
       <div class="field"><label>Hạn mức (VNĐ)</label><input type="number" id="accLimit" min="0"></div>
-      <div class="field"><label>Dư nợ hiện tại (VNĐ)</label><input type="number" id="accUsed" min="0"></div>
+      <div class="field">
+        <label>Dư nợ hiện tại (VNĐ)</label>
+        <input type="number" id="accUsed" min="0">
+        <div class="field-hint">Số tiền bạn đang nợ / đã tiêu (không phải số còn khả dụng)</div>
+      </div>
       <div class="field"><label>Ngày đến hạn thanh toán</label><input type="date" id="accDue"></div>
       <div class="field">
         <label>Lịch trả các kỳ sắp tới (tuỳ chọn)</label>
@@ -403,7 +407,7 @@ function renderCredit(){
       </div>
       <div class="credit-info">
         <div class="name">${a.name}</div>
-        <div class="nums">${fmt(a.used)} / ${fmt(a.limit)}</div>
+        <div class="nums">Nợ ${fmt(a.used)} / ${fmt(a.limit)}</div>
         <div class="due">${dueLabel}</div>
         ${instHtml}
       </div>
