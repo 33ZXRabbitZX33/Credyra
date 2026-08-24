@@ -174,7 +174,10 @@ button{font-family:var(--font-body);cursor:pointer}
         <p>Bảng điều khiển tài chính cá nhân</p>
       </div>
     </div>
-    <div class="clock"><span class="dot"></span><span id="clockText"></span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="clock"><span class="dot"></span><span id="clockText"></span></div>
+      <button class="btn small ghost" onclick="resetToSeed()" title="Xóa toàn bộ dữ liệu hiện tại và khôi phục về dữ liệu mẫu mới nhất">Khôi phục mẫu</button>
+    </div>
   </header>
 
   <div class="stats" id="statGrid"></div>
@@ -277,8 +280,9 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a6', type:'loan', name:'Laptop trả góp (SEasy)', totalTerms:12, paidTerms:6, rate:1500000, due:addDays(11)},
-      {id:'a7', type:'loan', name:'Xe máy (SEasy)', totalTerms:24, paidTerms:10, rate:2300000, due:addDays(4)},
+      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:2, rate:3993010, due:'2026-09-05'},
+      {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:2, rate:199651, due:'2026-09-10'},
+      {id:'a8', type:'loan', name:'SEasy #3 (24tr, 26/06)', totalTerms:9, paidTerms:2, rate:3439494, due:'2026-08-26'},
     ],
     transactions: [
       {id:'t1', accountId:'a2', type:'expense', amount:850000, note:'Mua sắm online', date:addDays(-1)},
@@ -295,6 +299,12 @@ function load(){
   catch(e){ return seed(); }
 }
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+function resetToSeed(){
+  if(!confirm('Xóa toàn bộ dữ liệu hiện tại (thẻ, khoản vay, ví, giao dịch) và khôi phục về dữ liệu mẫu mới nhất? Không thể hoàn tác.')) return;
+  state = seed();
+  save();
+  render();
+}
 
 function daysUntil(dateStr){
   const diff = Math.ceil((new Date(dateStr) - new Date(todayISO())) / 86400000);
