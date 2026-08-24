@@ -577,6 +577,10 @@ document.querySelectorAll('.overlay').forEach(ov=>{
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
 });
 
+document.addEventListener('wheel', e=>{
+  if(document.activeElement && document.activeElement.type === 'number') document.activeElement.blur();
+}, { passive: true });
+
 render();
 setInterval(renderClock, 30000);
 </script>
