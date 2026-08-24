@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS · Quản lý tài chính cá nhân</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg: #070a10;
+  --bg-grid: #0c1119;
+  --panel: #0f151f;
+  --panel-2: #141b27;
+  --line: rgba(124,164,255,0.14);
+  --line-strong: rgba(124,164,255,0.28);
+  --text: #e6edf7;
+  --text-dim: #8091a8;
+  --text-faint: #4c5b70;
+  --mint: #00f0a8;
+  --mint-dim: #00f0a833;
+  --violet: #8b6bff;
+  --violet-dim: #8b6bff33;
+  --red: #ff4d6d;
+  --red-dim: #ff4d6d26;
+  --amber: #ffb648;
+  --amber-dim: #ffb64826;
+  --font-display: 'Chakra Petch', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0/100% 42px,
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0/42px 100%,
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  min-height:100vh;
+  padding:32px 20px 120px;
+}
+.wrap{max-width:1080px;margin:0 auto}
+
+/* header */
+header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:34px;height:34px;border:1px solid var(--mint);border-radius:8px;display:flex;align-items:center;justify-content:center;position:relative}
+.brand-mark::before{content:'';position:absolute;inset:5px;border:1px solid var(--mint);border-radius:3px;opacity:.5}
+.brand-mark span{font-family:var(--font-mono);font-size:13px;color:var(--mint);font-weight:700}
+.brand h1{font-family:var(--font-display);font-size:20px;letter-spacing:2px;font-weight:600}
+.brand p{font-size:11px;color:var(--text-faint);letter-spacing:1.5px;text-transform:uppercase;font-family:var(--font-mono)}
+.clock{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);text-align:right}
+.clock .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--mint);margin-right:6px;box-shadow:0 0 8px var(--mint);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* section label */
+.section-label{display:flex;align-items:center;gap:10px;margin:36px 0 14px}
+.section-label .idx{font-family:var(--font-mono);font-size:11px;color:var(--mint);border:1px solid var(--line-strong);padding:2px 7px;border-radius:4px}
+.section-label h2{font-family:var(--font-display);font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);font-weight:500}
+.section-label .rule{flex:1;height:1px;background:var(--line)}
+
+/* stat grid */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.stat{background:var(--panel);padding:18px 20px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:var(--corner,var(--mint));opacity:.7}
+.stat .lbl{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1.2px;font-family:var(--font-mono);margin-bottom:8px}
+.stat .val{font-family:var(--font-mono);font-size:24px;font-weight:600;letter-spacing:-.5px}
+.stat.neg .val{color:var(--red)}
+.stat.pos .val{color:var(--mint)}
+.stat.warn .val{color:var(--amber)}
+
+/* card frame w/ corner brackets */
+.frame{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:18px}
+.frame::before,.frame::after{content:'';position:absolute;width:10px;height:10px;border-color:var(--line-strong)}
+.frame::before{top:-1px;left:-1px;border-top:1px solid;border-left:1px solid}
+.frame::after{bottom:-1px;right:-1px;border-bottom:1px solid;border-right:1px solid}
+
+/* credit grid */
+.credit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.credit-card{display:flex;gap:14px;align-items:center}
+.ring{position:relative;width:64px;height:64px;flex-shrink:0}
+.ring svg{transform:rotate(-90deg)}
+.ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:12px;font-weight:600}
+.credit-info{flex:1;min-width:0}
+.credit-info .name{font-family:var(--font-display);font-size:14px;letter-spacing:.5px;margin-bottom:2px}
+.credit-info .nums{font-family:var(--font-mono);font-size:11px;color:var(--text-dim)}
+.credit-info .due{font-size:10px;color:var(--text-faint);margin-top:4px;text-transform:uppercase;letter-spacing:.8px}
+
+/* loan table */
+.loan-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);align-items:center;font-size:13px}
+.loan-row:last-child{border-bottom:none}
+.loan-row.head{color:var(--text-faint);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:1px}
+.loan-name{font-family:var(--font-display);letter-spacing:.3px}
+.loan-progress{height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden;margin-top:5px}
+.loan-progress div{height:100%;background:var(--violet)}
+.mono{font-family:var(--font-mono)}
+
+/* wallet */
+.wallet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.wallet-card .name{font-family:var(--font-display);font-size:14px;margin-bottom:6px}
+.wallet-card .bal{font-family:var(--font-mono);font-size:20px;font-weight:600;color:var(--mint)}
+
+/* transactions */
+.tx-item{display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line);font-size:13px}
+.tx-item:last-child{border-bottom:none}
+.tx-left{display:flex;align-items:center;gap:10px}
+.tx-tag{font-family:var(--font-mono);font-size:9px;padding:3px 7px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px}
+.tx-tag.expense{background:var(--red-dim);color:var(--red)}
+.tx-tag.repay{background:var(--mint-dim);color:var(--mint)}
+.tx-tag.borrow{background:var(--amber-dim);color:var(--amber)}
+.tx-note{color:var(--text-dim)}
+.tx-amt{font-family:var(--font-mono);font-weight:600}
+.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:10px;padding:2px 6px}
+.tx-del:hover{color:var(--red)}
+.empty{color:var(--text-faint);font-size:13px;padding:20px 4px;text-align:center;font-family:var(--font-mono)}
+
+/* buttons */
+button{font-family:var(--font-body);cursor:pointer}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.btn{background:var(--panel-2);border:1px solid var(--line-strong);color:var(--text);padding:10px 16px;border-radius:3px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px;transition:.15s}
+.btn:hover{border-color:var(--mint);color:var(--mint)}
+.btn.primary{background:var(--mint);border-color:var(--mint);color:#04120c;font-weight:600}
+.btn.primary:hover{box-shadow:0 0 16px var(--mint-dim);color:#04120c}
+.btn.small{padding:6px 12px;font-size:12px}
+.btn.ghost{background:none;border-color:var(--line)}
+.fab{position:fixed;bottom:26px;right:26px;background:var(--mint);color:#04120c;border:none;width:56px;height:56px;border-radius:50%;font-size:26px;font-weight:600;box-shadow:0 0 24px var(--mint-dim);z-index:20}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(4,6,10,.75);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.overlay.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line-strong);border-radius:4px;padding:24px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto}
+.modal h3{font-family:var(--font-display);font-size:16px;letter-spacing:1px;margin-bottom:16px;text-transform:uppercase}
+.tabs{display:flex;gap:6px;margin-bottom:16px}
+.tab{flex:1;padding:8px;text-align:center;border:1px solid var(--line);border-radius:3px;font-size:12px;color:var(--text-dim);font-family:var(--font-mono)}
+.tab.active{border-color:var(--mint);color:var(--mint);background:var(--mint-dim)}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:var(--font-mono)}
+.field input,.field select{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:3px;font-size:14px;font-family:var(--font-body)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--mint)}
+.err{color:var(--red);font-size:12px;margin-top:5px;display:none;font-family:var(--font-mono)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="brand-mark"><span>N</span></div>
+      <div>
+        <h1>NEXUS FINANCE</h1>
+        <p>Bảng điều khiển tài chính cá nhân</p>
+      </div>
+    </div>
+    <div class="clock"><span class="dot"></span><span id="clockText"></span></div>
+  </header>
+
+  <div class="stats" id="statGrid"></div>
+
+  <div class="section-label"><span class="idx">01</span><h2>Thẻ tín dụng & ví trả sau</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit')">+ Thêm thẻ</button></div>
+  <div class="frame"><div class="credit-grid" id="creditGrid"></div></div>
+
+  <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
+  <div class="frame">
+    <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
+    <div id="loanRows"></div>
+  </div>
+
+  <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
+  <div class="frame"><div class="wallet-grid" id="walletGrid"></div></div>
+
+  <div class="section-label"><span class="idx">04</span><h2>Giao dịch gần đây</h2><div class="rule"></div></div>
+  <div class="frame" id="txList"></div>
+</div>
+
+<button class="fab" onclick="openTxModal()" aria-label="Thêm giao dịch">+</button>
+
+<div class="overlay" id="txOverlay">
+  <div class="modal">
+    <h3>Giao dịch mới</h3>
+    <div class="tabs">
+      <div class="tab active" data-type="expense" onclick="setTxType('expense')">Chi tiêu</div>
+      <div class="tab" data-type="repay" onclick="setTxType('repay')">Trả nợ</div>
+      <div class="tab" data-type="borrow" onclick="setTxType('borrow')">Vay mới</div>
+    </div>
+    <div class="field">
+      <label>Nguồn tiền</label>
+      <select id="txAccount"></select>
+    </div>
+    <div class="field">
+      <label>Số tiền (VNĐ)</label>
+      <input type="number" id="txAmount" placeholder="500000" min="0">
+      <div class="err" id="txAmountErr">Nhập số tiền hợp lệ</div>
+    </div>
+    <div class="field">
+      <label>Ghi chú</label>
+      <input type="text" id="txNote" placeholder="Ăn uống, mua sắm...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeTxModal()">Hủy</button>
+      <button class="btn primary" onclick="submitTx()">Lưu giao dịch</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="accOverlay">
+  <div class="modal">
+    <h3 id="accModalTitle">Thêm nguồn tiền</h3>
+    <div class="field">
+      <label>Tên</label>
+      <input type="text" id="accName" placeholder="VD: SPayLater">
+      <div class="err" id="accNameErr">Nhập tên nguồn tiền</div>
+    </div>
+    <div id="accFieldsCredit" class="acc-fields">
+      <div class="field"><label>Hạn mức (VNĐ)</label><input type="number" id="accLimit" min="0"></div>
+      <div class="field"><label>Dư nợ hiện tại (VNĐ)</label><input type="number" id="accUsed" min="0"></div>
+      <div class="field"><label>Ngày đến hạn thanh toán</label><input type="date" id="accDue"></div>
+    </div>
+    <div id="accFieldsLoan" class="acc-fields">
+      <div class="field"><label>Tổng số kỳ</label><input type="number" id="accTotalTerms" min="1"></div>
+      <div class="field"><label>Số kỳ đã trả</label><input type="number" id="accPaidTerms" min="0"></div>
+      <div class="field"><label>Lãi mỗi kỳ (VNĐ)</label><input type="number" id="accRate" min="0"></div>
+      <div class="field"><label>Ngày đến hạn kỳ tới</label><input type="date" id="accLoanDue"></div>
+    </div>
+    <div id="accFieldsWallet" class="acc-fields">
+      <div class="field"><label>Số dư hiện tại (VNĐ)</label><input type="number" id="accBalance" min="0"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeAccountModal()">Hủy</button>
+      <button class="btn primary" onclick="submitAccount()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORE_KEY = 'nexus_finance_state_v1';
+const fmt = n => Math.round(n).toLocaleString('vi-VN') + '₫';
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+function seed(){
+  return {
+    accounts: [
+      {id:'a1', type:'wallet', name:'MyCash', balance:12000000},
+      {id:'a2', type:'credit', name:'VIB Credit', limit:20000000, used:8500000, due:addDays(6)},
+      {id:'a3', type:'credit', name:'Tech Credit', limit:15000000, used:2100000, due:addDays(14)},
+      {id:'a4', type:'credit', name:'Momo Credit', limit:10000000, used:4800000, due:addDays(3)},
+      {id:'a5', type:'credit', name:'SPayLater', limit:5000000, used:1200000, due:addDays(9)},
+      {id:'a6', type:'loan', name:'Laptop trả góp (SEasy)', totalTerms:12, paidTerms:6, rate:1500000, due:addDays(11)},
+      {id:'a7', type:'loan', name:'Xe máy (SEasy)', totalTerms:24, paidTerms:10, rate:2300000, due:addDays(4)},
+    ],
+    transactions: [
+      {id:'t1', accountId:'a2', type:'expense', amount:850000, note:'Mua sắm online', date:addDays(-1)},
+      {id:'t2', accountId:'a1', type:'expense', amount:120000, note:'Cà phê', date:addDays(-2)},
+      {id:'t3', accountId:'a3', type:'repay', amount:2100000, note:'Trả kỳ tháng trước', date:addDays(-5)},
+    ]
+  };
+}
+function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+
+let state = load();
+function load(){
+  try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : seed(); }
+  catch(e){ return seed(); }
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+function daysUntil(dateStr){
+  const diff = Math.ceil((new Date(dateStr) - new Date(todayISO())) / 86400000);
+  return diff;
+}
+
+function render(){
+  renderClock();
+  renderStats();
+  renderCredit();
+  renderLoans();
+  renderWallets();
+  renderTx();
+  renderTxAccountOptions();
+}
+
+function renderClock(){
+  const el = document.getElementById('clockText');
+  const now = new Date();
+  el.textContent = now.toLocaleDateString('vi-VN') + '  ·  ' + now.toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'});
+}
+
+function renderStats(){
+  const wallets = state.accounts.filter(a=>a.type==='wallet');
+  const credits = state.accounts.filter(a=>a.type==='credit');
+  const loans = state.accounts.filter(a=>a.type==='loan');
+
+  const cash = wallets.reduce((s,a)=>s+a.balance,0);
+  const creditDebt = credits.reduce((s,a)=>s+a.used,0);
+  const loanDebt = loans.reduce((s,a)=>s+(a.totalTerms-a.paidTerms)*a.rate,0);
+  const totalDebt = creditDebt + loanDebt;
+  const netWorth = cash - totalDebt;
+  const availableCredit = credits.reduce((s,a)=>s+(a.limit-a.used),0);
+
+  const weekItems = [...credits.map(a=>({...a,amt:a.used})), ...loans.map(a=>({...a,amt:a.rate}))]
+    .filter(a=>daysUntil(a.due) <= 7 && daysUntil(a.due) >= 0);
+  const dueThisWeek = weekItems.reduce((s,a)=> s + (a.rate ?? a.amt*0 + a.amt*0), 0) +
+    credits.filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0).reduce((s,a)=>s+Math.min(a.used, a.limit*0.1 || a.used),0);
+  // simplified: sum next payment obligations due within 7 days
+  const dueSoon = [
+    ...loans.filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0).map(a=>a.rate),
+  ].reduce((s,v)=>s+v,0);
+
+  const stats = [
+    {lbl:'Tổng tài sản ròng', val:fmt(netWorth), cls: netWorth>=0 ? 'pos':'neg'},
+    {lbl:'Tổng nợ', val:fmt(totalDebt), cls:'neg'},
+    {lbl:'Hạn mức khả dụng', val:fmt(availableCredit), cls:'pos'},
+    {lbl:'Đến hạn 7 ngày tới', val:fmt(dueSoon), cls:'warn'},
+  ];
+  document.getElementById('statGrid').innerHTML = stats.map(s=>`
+    <div class="stat ${s.cls}"><div class="lbl">${s.lbl}</div><div class="val">${s.val}</div></div>
+  `).join('');
+}
+
+function ringColor(pct){
+  if(pct >= 85) return 'var(--red)';
+  if(pct >= 60) return 'var(--amber)';
+  return 'var(--mint)';
+}
+
+function renderCredit(){
+  const credits = state.accounts.filter(a=>a.type==='credit');
+  document.getElementById('creditGrid').innerHTML = credits.map(a=>{
+    const pct = Math.min(100, Math.round((a.used/a.limit)*100));
+    const r = 26, c = 2*Math.PI*r;
+    const offset = c - (pct/100)*c;
+    const color = ringColor(pct);
+    const d = daysUntil(a.due);
+    const dueLabel = d < 0 ? 'Đã quá hạn' : d === 0 ? 'Đến hạn hôm nay' : `Còn ${d} ngày`;
+    return `
+    <div class="credit-card">
+      <div class="ring">
+        <svg width="64" height="64">
+          <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="5"/>
+          <circle cx="32" cy="32" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+        </svg>
+        <div class="pct" style="color:${color}">${pct}%</div>
+      </div>
+      <div class="credit-info">
+        <div class="name">${a.name}</div>
+        <div class="nums">${fmt(a.used)} / ${fmt(a.limit)}</div>
+        <div class="due">${dueLabel}</div>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Chưa có thẻ nào</div>';
+}
+
+function renderLoans(){
+  const loans = state.accounts.filter(a=>a.type==='loan');
+  document.getElementById('loanRows').innerHTML = loans.map(a=>{
+    const pct = Math.round((a.paidTerms/a.totalTerms)*100);
+    const d = daysUntil(a.due);
+    const dueLabel = d < 0 ? 'Quá hạn' : d === 0 ? 'Hôm nay' : `${d} ngày`;
+    return `
+    <div class="loan-row">
+      <div class="loan-name">${a.name}<div class="loan-progress"><div style="width:${pct}%"></div></div></div>
+      <div class="mono">${a.paidTerms}/${a.totalTerms} kỳ</div>
+      <div class="mono">${dueLabel}</div>
+      <div class="mono">${fmt(a.rate)}</div>
+    </div>`;
+  }).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
+}
+
+function renderWallets(){
+  const wallets = state.accounts.filter(a=>a.type==='wallet');
+  document.getElementById('walletGrid').innerHTML = wallets.map(a=>`
+    <div class="frame wallet-card">
+      <div class="name">${a.name}</div>
+      <div class="bal">${fmt(a.balance)}</div>
+    </div>
+  `).join('') || '<div class="empty">Chưa có ví nào</div>';
+}
+
+function renderTx(){
+  const txs = [...state.transactions].sort((a,b)=> new Date(b.date)-new Date(a.date)).slice(0,12);
+  const tagLabel = {expense:'Chi tiêu', repay:'Trả nợ', borrow:'Vay mới'};
+  document.getElementById('txList').innerHTML = txs.map(t=>{
+    const acc = state.accounts.find(a=>a.id===t.accountId);
+    const sign = t.type==='repay' ? '−' : '+';
+    return `
+    <div class="tx-item">
+      <div class="tx-left">
+        <span class="tx-tag ${t.type}">${tagLabel[t.type]}</span>
+        <span>${acc ? acc.name : '—'}</span>
+        <span class="tx-note">${t.note || ''}</span>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="tx-amt">${sign}${fmt(t.amount)}</span>
+        <button class="tx-del" onclick="deleteTx('${t.id}')" aria-label="Xóa giao dịch">×</button>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Chưa có giao dịch nào</div>';
+}
+
+/* ---- transaction modal ---- */
+let currentTxType = 'expense';
+function openTxModal(){
+  document.getElementById('txOverlay').classList.add('open');
+  document.getElementById('txAmount').value = '';
+  document.getElementById('txNote').value = '';
+  document.getElementById('txAmountErr').style.display = 'none';
+  setTxType('expense');
+}
+function closeTxModal(){ document.getElementById('txOverlay').classList.remove('open'); }
+function setTxType(type){
+  currentTxType = type;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.type===type));
+}
+function renderTxAccountOptions(){
+  const sel = document.getElementById('txAccount');
+  sel.innerHTML = state.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+}
+function submitTx(){
+  const amountInput = document.getElementById('txAmount');
+  const amount = parseFloat(amountInput.value);
+  const errEl = document.getElementById('txAmountErr');
+  if(!amount || amount <= 0){
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  const accountId = document.getElementById('txAccount').value;
+  const note = document.getElementById('txNote').value.trim();
+  const tx = {id:'t'+Date.now(), accountId, type:currentTxType, amount, note, date:todayISO()};
+  state.transactions.push(tx);
+
+  const acc = state.accounts.find(a=>a.id===accountId);
+  if(acc){
+    if(acc.type==='wallet'){
+      if(currentTxType==='expense') acc.balance -= amount;
+      if(currentTxType==='borrow') acc.balance += amount;
+    } else if(acc.type==='credit'){
+      if(currentTxType==='expense'||currentTxType==='borrow') acc.used += amount;
+      if(currentTxType==='repay') acc.used = Math.max(0, acc.used - amount);
+    }
+  }
+  save();
+  render();
+  closeTxModal();
+}
+function deleteTx(id){
+  state.transactions = state.transactions.filter(t=>t.id!==id);
+  save();
+  render();
+}
+
+/* ---- account modal ---- */
+let currentAccType = 'credit';
+function openAccountModal(type){
+  currentAccType = type;
+  document.getElementById('accModalTitle').textContent =
+    type==='credit' ? 'Thêm thẻ / ví trả sau' : type==='loan' ? 'Thêm khoản vay trả góp' : 'Thêm ví';
+  document.querySelectorAll('.acc-fields').forEach(f=>f.style.display='none');
+  document.getElementById('accFields' + type.charAt(0).toUpperCase() + type.slice(1)).style.display = 'block';
+  document.getElementById('accName').value = '';
+  document.getElementById('accNameErr').style.display = 'none';
+  document.getElementById('accOverlay').classList.add('open');
+}
+function closeAccountModal(){ document.getElementById('accOverlay').classList.remove('open'); }
+function submitAccount(){
+  const name = document.getElementById('accName').value.trim();
+  const nameErr = document.getElementById('accNameErr');
+  if(!name){ nameErr.style.display = 'block'; return; }
+  nameErr.style.display = 'none';
+
+  const id = 'a'+Date.now();
+  let acc;
+  if(currentAccType==='credit'){
+    acc = {id, type:'credit', name,
+      limit: parseFloat(document.getElementById('accLimit').value) || 0,
+      used: parseFloat(document.getElementById('accUsed').value) || 0,
+      due: document.getElementById('accDue').value || todayISO()};
+  } else if(currentAccType==='loan'){
+    acc = {id, type:'loan', name,
+      totalTerms: parseFloat(document.getElementById('accTotalTerms').value) || 1,
+      paidTerms: parseFloat(document.getElementById('accPaidTerms').value) || 0,
+      rate: parseFloat(document.getElementById('accRate').value) || 0,
+      due: document.getElementById('accLoanDue').value || todayISO()};
+  } else {
+    acc = {id, type:'wallet', name,
+      balance: parseFloat(document.getElementById('accBalance').value) || 0};
+  }
+  state.accounts.push(acc);
+  save();
+  render();
+  closeAccountModal();
+}
+
+document.querySelectorAll('.overlay').forEach(ov=>{
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
+});
+
+render();
+setInterval(renderClock, 30000);
+</script>
+</body>
+</html>
