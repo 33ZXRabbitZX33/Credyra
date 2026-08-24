@@ -133,6 +133,7 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .tx-tag.expense{background:var(--red-dim);color:var(--red)}
 .tx-tag.repay{background:var(--mint-dim);color:var(--mint)}
 .tx-tag.borrow{background:var(--amber-dim);color:var(--amber)}
+.tx-tag.category{background:var(--violet-dim);color:var(--violet)}
 .tx-note{color:var(--text-dim)}
 .tx-amt{font-family:var(--font-mono);font-weight:600}
 .tx-edit,.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:8px;padding:2px 6px}
@@ -167,8 +168,9 @@ button{font-family:var(--font-body);cursor:pointer}
 .tab.active{border-color:var(--mint);color:var(--mint);background:var(--mint-dim)}
 .field{margin-bottom:13px}
 .field label{display:block;font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-family:var(--font-mono)}
-.field input,.field select{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:3px;font-size:14px;font-family:var(--font-body)}
-.field input:focus,.field select:focus{outline:none;border-color:var(--mint)}
+.field input,.field select,.field textarea{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:3px;font-size:14px;font-family:var(--font-body)}
+.field textarea{min-height:140px;resize:vertical;line-height:1.5}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--mint)}
 .err{color:var(--red);font-size:12px;margin-top:5px;display:none;font-family:var(--font-mono)}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
 .inst-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;align-items:center}
@@ -218,6 +220,7 @@ button{font-family:var(--font-body);cursor:pointer}
   <div class="navtabs">
     <button class="navtab active" data-tab="dashboard" onclick="switchTab('dashboard')">Tổng quan</button>
     <button class="navtab" data-tab="expenses" onclick="switchTab('expenses')">Chi phí cố định</button>
+    <button class="navtab" data-tab="quickadd" onclick="switchTab('quickadd')">Nhập nhanh (AI)</button>
   </div>
 
   <div id="tabDashboard" class="tabpage">
@@ -245,6 +248,33 @@ button{font-family:var(--font-body);cursor:pointer}
 
     <div class="section-label"><span class="idx">01</span><h2>Chi phí cố định hàng tháng</h2><div class="rule"></div><button class="btn small ghost" onclick="openExpenseModal()">+ Thêm chi phí</button></div>
     <div class="frame" id="expenseList"></div>
+  </div>
+
+  <div id="tabQuickadd" class="tabpage" style="display:none">
+    <div class="section-label"><span class="idx">01</span><h2>Nhập nhanh bằng AI</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="field">
+        <label>Dán / gõ các khoản chi, mỗi dòng một khoản</label>
+        <textarea id="qaText" placeholder="đi ăn: 20000đ&#10;đi chơi: 100k&#10;xem phim cgv: 300k"></textarea>
+      </div>
+      <div class="field">
+        <label>Trừ tiền từ</label>
+        <select id="qaAccount"></select>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="qaAnalyzeBtn" onclick="analyzeQuickAdd()">✨ Phân tích bằng AI</button>
+      </div>
+      <div class="err" id="qaErr" style="margin-top:10px"></div>
+    </div>
+
+    <div class="section-label" id="qaPreviewLabel" style="display:none"><span class="idx">02</span><h2>Xem trước</h2><div class="rule"></div></div>
+    <div class="frame" id="qaPreviewFrame" style="display:none">
+      <div id="qaPreviewList"></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn ghost" onclick="cancelQuickAdd()">Hủy</button>
+        <button class="btn primary" onclick="confirmQuickAdd()">Lưu tất cả giao dịch</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -448,6 +478,7 @@ function render(){
   renderTx();
   renderTxAccountOptions();
   renderExpenses();
+  renderQaAccountOptions();
 }
 
 function switchTab(tab){
@@ -774,6 +805,98 @@ function deleteExpenseBtn(){
   save();
   render();
   closeExpenseModal();
+}
+
+/* ---- quick add via AI ---- */
+let qaParsedItems = [];
+
+function renderQaAccountOptions(){
+  const sel = document.getElementById('qaAccount');
+  const prev = sel.value;
+  sel.innerHTML = state.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+  if(prev) sel.value = prev;
+}
+
+async function analyzeQuickAdd(){
+  const text = document.getElementById('qaText').value.trim();
+  const errEl = document.getElementById('qaErr');
+  errEl.style.display = 'none';
+  if(!text){
+    errEl.textContent = 'Nhập ít nhất 1 dòng chi tiêu';
+    errEl.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('qaAnalyzeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Đang phân tích...';
+  try{
+    const resp = await fetch('/api/categorize', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({text}),
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || 'Lỗi không xác định');
+    qaParsedItems = data.items || [];
+    if(!qaParsedItems.length){
+      errEl.textContent = 'AI không tìm thấy khoản chi tiêu nào trong văn bản này';
+      errEl.style.display = 'block';
+    }
+    renderQaPreview();
+  } catch(err){
+    errEl.textContent = 'Không phân tích được: ' + err.message + ' — tính năng này chỉ hoạt động trên bản deploy Vercel (không chạy trên GitHub Pages hoặc khi mở file trực tiếp).';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Phân tích bằng AI';
+  }
+}
+
+function renderQaPreview(){
+  const has = qaParsedItems.length > 0;
+  document.getElementById('qaPreviewLabel').style.display = has ? 'flex' : 'none';
+  document.getElementById('qaPreviewFrame').style.display = has ? 'block' : 'none';
+  document.getElementById('qaPreviewList').innerHTML = qaParsedItems.map((it,i)=>`
+    <div class="tx-item">
+      <div class="tx-left">
+        <span class="tx-tag category">${it.category}</span>
+        <span>${it.description}</span>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="tx-amt">${fmt(it.amount)}</span>
+        <button class="tx-del" onclick="removeQaItem(${i})" aria-label="Bỏ khoản này">×</button>
+      </div>
+    </div>
+  `).join('');
+}
+function removeQaItem(i){
+  qaParsedItems.splice(i, 1);
+  renderQaPreview();
+}
+function cancelQuickAdd(){
+  qaParsedItems = [];
+  document.getElementById('qaText').value = '';
+  document.getElementById('qaErr').style.display = 'none';
+  renderQaPreview();
+}
+function confirmQuickAdd(){
+  if(!qaParsedItems.length) return;
+  const accountId = document.getElementById('qaAccount').value;
+  const acc = state.accounts.find(a=>a.id===accountId);
+  qaParsedItems.forEach(it=>{
+    const tx = {
+      id: 't' + Date.now() + Math.random().toString(36).slice(2,6),
+      accountId, type:'expense', amount:it.amount,
+      note: `[${it.category}] ${it.description}`, date: todayISO(),
+    };
+    state.transactions.push(tx);
+    applyTxToAccount(acc, 'expense', it.amount);
+  });
+  save();
+  qaParsedItems = [];
+  document.getElementById('qaText').value = '';
+  render();
+  renderQaPreview();
 }
 
 /* ---- transaction modal ---- */
