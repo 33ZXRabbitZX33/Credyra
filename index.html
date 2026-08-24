@@ -65,13 +65,22 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 
 /* stat grid */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
-.stat{background:var(--panel);padding:18px 20px;position:relative;overflow:hidden}
+.stat{background:var(--panel);padding:18px 20px;position:relative;overflow:hidden;cursor:pointer;transition:.15s}
+.stat:hover{background:var(--panel-2)}
 .stat::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:var(--corner,var(--mint));opacity:.7}
 .stat .lbl{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1.2px;font-family:var(--font-mono);margin-bottom:8px}
 .stat .val{font-family:var(--font-mono);font-size:24px;font-weight:600;letter-spacing:-.5px}
 .stat.neg .val{color:var(--red)}
 .stat.pos .val{color:var(--mint)}
 .stat.warn .val{color:var(--amber)}
+
+/* stat detail modal */
+.detail-row{display:flex;justify-content:space-between;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:13px}
+.detail-row:last-child{border-bottom:none}
+.detail-row .dname{color:var(--text-dim)}
+.detail-row .dval{font-family:var(--font-mono);font-weight:600;white-space:nowrap}
+.detail-row .dval.neg{color:var(--red)}
+.detail-total{display:flex;justify-content:space-between;padding:12px 4px 2px;margin-top:6px;border-top:1px solid var(--line-strong);font-size:14px;font-weight:600;font-family:var(--font-mono)}
 
 /* card frame w/ corner brackets */
 .frame{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:18px}
@@ -283,6 +292,16 @@ button{font-family:var(--font-body);cursor:pointer}
   </div>
 </div>
 
+<div class="overlay" id="statOverlay">
+  <div class="modal">
+    <h3 id="statModalTitle">Chi tiết</h3>
+    <div id="statDetailList"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeStatModal()">Đóng</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORE_KEY = 'nexus_finance_state_v1';
 const fmt = n => Math.round(n).toLocaleString('vi-VN') + '₫';
@@ -386,16 +405,75 @@ function renderStats(){
   const dueSoon = loanDueSoon + creditDueSoon;
 
   const stats = [
-    {lbl:'Tổng tài sản ròng', val:fmt(netWorth), cls: netWorth>=0 ? 'pos':'neg'},
-    {lbl:'Tổng nợ', val:fmt(totalDebt), cls:'neg'},
-    {lbl:'Tiền mặt khả dụng', val:fmt(cash), cls:'pos'},
-    {lbl:'Hạn mức credit khả dụng', val:fmt(availableCredit), cls:'pos'},
-    {lbl:'Đến hạn 7 ngày tới', val:fmt(dueSoon), cls:'warn'},
+    {lbl:'Tổng tài sản ròng', val:fmt(netWorth), cls: netWorth>=0 ? 'pos':'neg', key:'networth'},
+    {lbl:'Tổng nợ', val:fmt(totalDebt), cls:'neg', key:'debt'},
+    {lbl:'Tiền mặt khả dụng', val:fmt(cash), cls:'pos', key:'cash'},
+    {lbl:'Hạn mức credit khả dụng', val:fmt(availableCredit), cls:'pos', key:'creditAvail'},
+    {lbl:'Đến hạn 7 ngày tới', val:fmt(dueSoon), cls:'warn', key:'duesoon'},
   ];
   document.getElementById('statGrid').innerHTML = stats.map(s=>`
-    <div class="stat ${s.cls}"><div class="lbl">${s.lbl}</div><div class="val">${s.val}</div></div>
+    <div class="stat ${s.cls}" onclick="openStatModal('${s.key}')"><div class="lbl">${s.lbl}</div><div class="val">${s.val}</div></div>
   `).join('');
 }
+
+function statBreakdown(key){
+  const wallets = state.accounts.filter(a=>a.type==='wallet');
+  const credits = state.accounts.filter(a=>a.type==='credit');
+  const loans = state.accounts.filter(a=>a.type==='loan');
+
+  if(key==='networth'){
+    const cash = wallets.reduce((s,a)=>s+a.balance,0);
+    const creditDebt = credits.reduce((s,a)=>s+a.used,0);
+    const loanDebt = loans.reduce((s,a)=>s+(a.totalTerms-a.paidTerms)*a.rate,0);
+    const rows = [
+      {name:'Tiền mặt (tổng ví)', val:cash},
+      {name:'Nợ thẻ tín dụng / BNPL', val:-creditDebt},
+      {name:'Nợ khoản vay còn lại', val:-loanDebt},
+    ];
+    return {title:'Tổng tài sản ròng', rows, total: cash - creditDebt - loanDebt};
+  }
+  if(key==='debt'){
+    const rows = [
+      ...credits.filter(a=>a.used>0).map(a=>({name:a.name, val:a.used})),
+      ...loans.map(a=>({name:a.name, val:(a.totalTerms-a.paidTerms)*a.rate})),
+    ];
+    return {title:'Tổng nợ', rows, total: rows.reduce((s,r)=>s+r.val,0)};
+  }
+  if(key==='cash'){
+    const rows = wallets.map(a=>({name:a.name, val:a.balance}));
+    return {title:'Tiền mặt khả dụng', rows, total: rows.reduce((s,r)=>s+r.val,0)};
+  }
+  if(key==='creditAvail'){
+    const rows = credits.map(a=>({name:a.name, val:a.limit - a.used}));
+    return {title:'Hạn mức credit khả dụng', rows, total: rows.reduce((s,r)=>s+r.val,0)};
+  }
+  if(key==='duesoon'){
+    const rows = [];
+    loans.forEach(a=>{
+      const d = daysUntil(a.due);
+      if(d<=7 && d>=0) rows.push({name:`${a.name} (kỳ tới)`, val:a.rate});
+    });
+    credits.forEach(a=>{
+      (a.installments||[]).forEach(i=>{
+        const d = daysUntil(i.due);
+        if(d<=7 && d>=0) rows.push({name:`${a.name} — ${i.label||'kỳ'}`, val:i.amount});
+      });
+    });
+    return {title:'Đến hạn 7 ngày tới', rows, total: rows.reduce((s,r)=>s+r.val,0)};
+  }
+  return {title:'Chi tiết', rows:[], total:0};
+}
+
+function openStatModal(key){
+  const {title, rows, total} = statBreakdown(key);
+  document.getElementById('statModalTitle').textContent = title;
+  const rowsHtml = rows.length ? rows.map(r=>`
+    <div class="detail-row"><span class="dname">${r.name}</span><span class="dval ${r.val<0?'neg':''}">${r.val<0?'-':''}${fmt(Math.abs(r.val))}</span></div>
+  `).join('') : '<div class="empty">Không có mục nào</div>';
+  document.getElementById('statDetailList').innerHTML = rowsHtml + `<div class="detail-total"><span>Tổng</span><span>${fmt(total)}</span></div>`;
+  document.getElementById('statOverlay').classList.add('open');
+}
+function closeStatModal(){ document.getElementById('statOverlay').classList.remove('open'); }
 
 function ringColor(availablePct){
   if(availablePct <= 15) return 'var(--red)';
