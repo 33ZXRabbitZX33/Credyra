@@ -280,7 +280,7 @@ function seed(){
       {id:'a2', type:'credit', name:'VIB Credit', limit:20000000, used:8500000, due:addDays(6)},
       {id:'a3', type:'credit', name:'Tech Credit', limit:15000000, used:2100000, due:addDays(14)},
       {id:'a4', type:'credit', name:'Momo Credit', limit:10000000, used:4800000, due:addDays(3)},
-      {id:'a5', type:'credit', name:'SPayLater', limit:21000000, used:14341332, due:'2026-09-05', installments:[
+      {id:'a5', type:'credit', name:'SPayLater', limit:21000000, used:6658668, due:'2026-09-05', installments:[
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
@@ -407,7 +407,7 @@ function renderCredit(){
       </div>
       <div class="credit-info">
         <div class="name">${a.name}</div>
-        <div class="nums">Nợ ${fmt(a.used)} / ${fmt(a.limit)}</div>
+        <div class="nums">Khả dụng ${fmt(a.limit - a.used)} / ${fmt(a.limit)}</div>
         <div class="due">${dueLabel}</div>
         ${instHtml}
       </div>
