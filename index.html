@@ -89,6 +89,11 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .credit-info .name{font-family:var(--font-display);font-size:14px;letter-spacing:.5px;margin-bottom:2px}
 .credit-info .nums{font-family:var(--font-mono);font-size:11px;color:var(--text-dim)}
 .credit-info .due{font-size:10px;color:var(--text-faint);margin-top:4px;text-transform:uppercase;letter-spacing:.8px}
+.inst-list{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.inst-item{display:flex;justify-content:space-between;gap:8px;font-size:10px;font-family:var(--font-mono);color:var(--text-dim)}
+.inst-item .inst-when{color:var(--text-faint)}
+.inst-item .inst-when.soon{color:var(--amber)}
+.inst-item .inst-when.over{color:var(--red)}
 
 /* loan table */
 .loan-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);align-items:center;font-size:13px}
@@ -150,6 +155,13 @@ button{font-family:var(--font-body);cursor:pointer}
 .field input:focus,.field select:focus{outline:none;border-color:var(--mint)}
 .err{color:var(--red);font-size:12px;margin-top:5px;display:none;font-family:var(--font-mono)}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.inst-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;align-items:center}
+.inst-row .instLabel{flex:0 0 62px;min-width:0}
+.inst-row .instAmount{flex:1 1 100px;min-width:0}
+.inst-row .instDue{flex:1 1 130px;min-width:0}
+.inst-row .inst-del{background:none;border:1px solid var(--line);color:var(--text-faint);cursor:pointer;border-radius:3px;padding:8px 10px;flex:0 0 auto}
+.inst-row .inst-del:hover{color:var(--red);border-color:var(--red)}
+.field-hint{font-size:10px;color:var(--text-faint);margin-top:-8px;margin-bottom:10px;font-family:var(--font-mono)}
 </style>
 </head>
 <body>
@@ -225,6 +237,12 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="field"><label>Hạn mức (VNĐ)</label><input type="number" id="accLimit" min="0"></div>
       <div class="field"><label>Dư nợ hiện tại (VNĐ)</label><input type="number" id="accUsed" min="0"></div>
       <div class="field"><label>Ngày đến hạn thanh toán</label><input type="date" id="accDue"></div>
+      <div class="field">
+        <label>Lịch trả các kỳ sắp tới (tuỳ chọn)</label>
+        <div class="field-hint">Dùng cho ví trả sau / BNPL trả nhiều kỳ như SPayLater. Bỏ trống nếu thẻ chỉ có 1 hạn thanh toán ở trên.</div>
+        <div id="instRows"></div>
+        <button type="button" class="btn small ghost" onclick="addInstallmentRow()">+ Thêm kỳ</button>
+      </div>
     </div>
     <div id="accFieldsLoan" class="acc-fields">
       <div class="field"><label>Tổng số kỳ</label><input type="number" id="accTotalTerms" min="1"></div>
@@ -255,7 +273,10 @@ function seed(){
       {id:'a2', type:'credit', name:'VIB Credit', limit:20000000, used:8500000, due:addDays(6)},
       {id:'a3', type:'credit', name:'Tech Credit', limit:15000000, used:2100000, due:addDays(14)},
       {id:'a4', type:'credit', name:'Momo Credit', limit:10000000, used:4800000, due:addDays(3)},
-      {id:'a5', type:'credit', name:'SPayLater', limit:5000000, used:1200000, due:addDays(9)},
+      {id:'a5', type:'credit', name:'SPayLater', limit:21000000, used:14341332, due:'2026-09-05', installments:[
+        {label:'Th09', amount:3340543, due:'2026-09-05'},
+        {label:'Th10', amount:3340545, due:'2026-10-05'},
+      ]},
       {id:'a6', type:'loan', name:'Laptop trả góp (SEasy)', totalTerms:12, paidTerms:6, rate:1500000, due:addDays(11)},
       {id:'a7', type:'loan', name:'Xe máy (SEasy)', totalTerms:24, paidTerms:10, rate:2300000, due:addDays(4)},
     ],
@@ -278,6 +299,13 @@ function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 function daysUntil(dateStr){
   const diff = Math.ceil((new Date(dateStr) - new Date(todayISO())) / 86400000);
   return diff;
+}
+
+function nearestDue(acc){
+  if(acc.installments && acc.installments.length){
+    return [...acc.installments].sort((x,y)=> new Date(x.due) - new Date(y.due))[0].due;
+  }
+  return acc.due;
 }
 
 function render(){
@@ -308,14 +336,18 @@ function renderStats(){
   const netWorth = cash - totalDebt;
   const availableCredit = credits.reduce((s,a)=>s+(a.limit-a.used),0);
 
-  const weekItems = [...credits.map(a=>({...a,amt:a.used})), ...loans.map(a=>({...a,amt:a.rate}))]
-    .filter(a=>daysUntil(a.due) <= 7 && daysUntil(a.due) >= 0);
-  const dueThisWeek = weekItems.reduce((s,a)=> s + (a.rate ?? a.amt*0 + a.amt*0), 0) +
-    credits.filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0).reduce((s,a)=>s+Math.min(a.used, a.limit*0.1 || a.used),0);
-  // simplified: sum next payment obligations due within 7 days
-  const dueSoon = [
-    ...loans.filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0).map(a=>a.rate),
-  ].reduce((s,v)=>s+v,0);
+  // sum next payment obligations due within 7 days: loan installments, plus
+  // known per-period amounts for credit/BNPL accounts that have a schedule
+  const loanDueSoon = loans
+    .filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0)
+    .reduce((s,a)=>s+a.rate, 0);
+  const creditDueSoon = credits.reduce((s,a)=>{
+    if(!a.installments || !a.installments.length) return s;
+    return s + a.installments
+      .filter(i=>daysUntil(i.due)<=7 && daysUntil(i.due)>=0)
+      .reduce((s2,i)=>s2+i.amount, 0);
+  }, 0);
+  const dueSoon = loanDueSoon + creditDueSoon;
 
   const stats = [
     {lbl:'Tổng tài sản ròng', val:fmt(netWorth), cls: netWorth>=0 ? 'pos':'neg'},
@@ -341,8 +373,15 @@ function renderCredit(){
     const r = 26, c = 2*Math.PI*r;
     const offset = c - (pct/100)*c;
     const color = ringColor(pct);
-    const d = daysUntil(a.due);
+    const d = daysUntil(nearestDue(a));
     const dueLabel = d < 0 ? 'Đã quá hạn' : d === 0 ? 'Đến hạn hôm nay' : `Còn ${d} ngày`;
+    const instHtml = (a.installments && a.installments.length) ? `
+      <div class="inst-list">${[...a.installments].sort((x,y)=>new Date(x.due)-new Date(y.due)).map(i=>{
+        const di = daysUntil(i.due);
+        const whenLabel = di < 0 ? 'Quá hạn' : di === 0 ? 'Hôm nay' : `còn ${di} ngày`;
+        const whenCls = di < 0 ? 'over' : di <= 3 ? 'soon' : '';
+        return `<div class="inst-item"><span>${i.label || 'Kỳ'}</span><span>${fmt(i.amount)}</span><span class="inst-when ${whenCls}">${whenLabel}</span></div>`;
+      }).join('')}</div>` : '';
     return `
     <div class="credit-card" onclick="openAccountModal('credit','${a.id}')">
       <div class="ring">
@@ -356,6 +395,7 @@ function renderCredit(){
         <div class="name">${a.name}</div>
         <div class="nums">${fmt(a.used)} / ${fmt(a.limit)}</div>
         <div class="due">${dueLabel}</div>
+        ${instHtml}
       </div>
     </div>`;
   }).join('') || '<div class="empty">Chưa có thẻ nào</div>';
@@ -498,6 +538,22 @@ function deleteTx(id){
   render();
 }
 
+/* ---- installment schedule rows (credit / BNPL accounts) ---- */
+function renderInstallmentRow(inst){
+  const i = inst || {};
+  const row = document.createElement('div');
+  row.className = 'inst-row';
+  const labelVal = (i.label || '').replace(/"/g, '&quot;');
+  row.innerHTML = `
+    <input type="text" class="instLabel" placeholder="Th09" value="${labelVal}">
+    <input type="number" class="instAmount" placeholder="Số tiền" min="0" value="${i.amount ?? ''}">
+    <input type="date" class="instDue" value="${i.due || ''}">
+    <button type="button" class="inst-del" onclick="this.parentElement.remove()" aria-label="Xóa kỳ">×</button>
+  `;
+  document.getElementById('instRows').appendChild(row);
+}
+function addInstallmentRow(){ renderInstallmentRow(null); }
+
 /* ---- account modal ---- */
 let currentAccType = 'credit';
 let editingAccountId = null;
@@ -515,10 +571,12 @@ function openAccountModal(type, id){
 
   document.getElementById('accName').value = acc ? acc.name : '';
   document.getElementById('accNameErr').style.display = 'none';
+  document.getElementById('instRows').innerHTML = '';
   if(type==='credit'){
     document.getElementById('accLimit').value = acc ? acc.limit : '';
     document.getElementById('accUsed').value = acc ? acc.used : '';
     document.getElementById('accDue').value = acc ? acc.due : '';
+    (acc && acc.installments ? acc.installments : []).forEach(renderInstallmentRow);
   } else if(type==='loan'){
     document.getElementById('accTotalTerms').value = acc ? acc.totalTerms : '';
     document.getElementById('accPaidTerms').value = acc ? acc.paidTerms : '';
@@ -540,10 +598,17 @@ function submitAccount(){
   const id = existing ? existing.id : 'a'+Date.now();
   let acc;
   if(currentAccType==='credit'){
+    const installments = Array.from(document.querySelectorAll('#instRows .inst-row')).map(row=>({
+      label: row.querySelector('.instLabel').value.trim(),
+      amount: parseFloat(row.querySelector('.instAmount').value),
+      due: row.querySelector('.instDue').value,
+    })).filter(i=> i.amount > 0 && i.due);
+
     acc = {id, type:'credit', name,
       limit: parseFloat(document.getElementById('accLimit').value) || 0,
       used: parseFloat(document.getElementById('accUsed').value) || 0,
-      due: document.getElementById('accDue').value || todayISO()};
+      due: document.getElementById('accDue').value || todayISO(),
+      installments};
   } else if(currentAccType==='loan'){
     acc = {id, type:'loan', name,
       totalTerms: parseFloat(document.getElementById('accTotalTerms').value) || 1,
