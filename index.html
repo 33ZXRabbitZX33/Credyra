@@ -198,10 +198,38 @@ button{font-family:var(--font-body);cursor:pointer}
 .expense-due{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px}
 .expense-due.soon{color:var(--amber)}
 .expense-due.over{color:var(--red)}
+
+/* login screen */
+.login-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.login-box{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line-strong);border-radius:4px;padding:32px 28px}
+.login-box .brand-mark{margin:0 auto 14px}
+.login-box h1{text-align:center;font-family:var(--font-display);font-size:20px;letter-spacing:2px;margin-bottom:4px}
+.login-box p{text-align:center;color:var(--text-faint);font-size:12px;margin-bottom:24px;font-family:var(--font-mono)}
+#authLoading{text-align:center;color:var(--text-dim);font-family:var(--font-mono);font-size:13px}
+.save-status{font-family:var(--font-mono);font-size:10px}
+.save-status.saving{color:var(--text-faint)}
+.save-status.ok{color:var(--mint)}
+.save-status.err{color:var(--red)}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div id="authLoading" style="display:none">Đang kiểm tra đăng nhập...</div>
+    <div id="authForm">
+      <div class="brand-mark"><span>C</span></div>
+      <h1>CREDYRA</h1>
+      <p>Đăng nhập để tiếp tục</p>
+      <div class="field"><label>Tài khoản</label><input type="text" id="loginUser" autocomplete="username"></div>
+      <div class="field"><label>Mật khẩu</label><input type="password" id="loginPass" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitLogin()"></div>
+      <div class="err" id="loginErr"></div>
+      <button class="btn primary" id="loginBtn" style="width:100%;justify-content:center;margin-top:6px" onclick="submitLogin()">Đăng nhập</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" style="display:none">
   <header>
     <div class="brand">
       <div class="brand-mark"><span>C</span></div>
@@ -211,8 +239,10 @@ button{font-family:var(--font-body);cursor:pointer}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
+      <span class="save-status" id="saveStatus"></span>
       <div class="clock"><span class="dot"></span><span id="clockText"></span></div>
       <button class="btn small ghost" onclick="resetToSeed()" title="Xóa toàn bộ dữ liệu hiện tại và khôi phục về dữ liệu mẫu mới nhất">Khôi phục mẫu</button>
+      <button class="btn small ghost" onclick="logout()">Đăng xuất</button>
     </div>
   </header>
 
@@ -399,7 +429,6 @@ button{font-family:var(--font-body);cursor:pointer}
 </div>
 
 <script>
-const STORE_KEY = 'nexus_finance_state_v1';
 const fmt = n => Math.round(n).toLocaleString('vi-VN') + '₫';
 const todayISO = () => new Date().toISOString().slice(0,10);
 
@@ -436,22 +465,116 @@ function seed(){
 }
 function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 
-let state = load();
-function load(){
+let state = null;
+
+async function save(){
+  const el = document.getElementById('saveStatus');
+  if(el){ el.textContent = 'Đang lưu...'; el.className = 'save-status saving'; }
   try{
-    const raw = localStorage.getItem(STORE_KEY);
-    const s = raw ? JSON.parse(raw) : seed();
-    if(!s.expenses) s.expenses = [];
-    if(!s.dailyExpenses) s.dailyExpenses = [];
-    return s;
-  } catch(e){ return seed(); }
+    const resp = await fetch('/api/state', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(state),
+    });
+    if(resp.status === 401){ showLoginForm('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'); return; }
+    if(!resp.ok) throw new Error('save failed');
+    if(el){ el.textContent = 'Đã lưu'; el.className = 'save-status ok'; }
+  } catch(err){
+    console.error(err);
+    if(el){ el.textContent = 'Lỗi lưu dữ liệu — kiểm tra mạng'; el.className = 'save-status err'; }
+  }
 }
-function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
 function resetToSeed(){
   if(!confirm('Xóa toàn bộ dữ liệu hiện tại (thẻ, khoản vay, ví, giao dịch) và khôi phục về dữ liệu mẫu mới nhất? Không thể hoàn tác.')) return;
   state = seed();
   save();
   render();
+}
+
+/* ---- auth + server-backed state ---- */
+async function loadStateFromServer(){
+  const resp = await fetch('/api/state');
+  if(resp.status === 401){ showLoginForm(); return false; }
+  const data = await resp.json();
+  state = data.state || seed();
+  if(!state.expenses) state.expenses = [];
+  if(!state.dailyExpenses) state.dailyExpenses = [];
+  return true;
+}
+
+function showApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.querySelector('.wrap').style.display = '';
+  render();
+}
+
+function showLoginForm(err){
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('authLoading').style.display = 'none';
+  document.getElementById('authForm').style.display = 'block';
+  document.querySelector('.wrap').style.display = 'none';
+  const errEl = document.getElementById('loginErr');
+  if(err){ errEl.textContent = err; errEl.style.display = 'block'; }
+  else { errEl.textContent = ''; errEl.style.display = 'none'; }
+}
+
+async function submitLogin(){
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  try{
+    const resp = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password}),
+    });
+    const data = await resp.json();
+    if(!resp.ok){
+      errEl.textContent = data.error || 'Đăng nhập thất bại';
+      errEl.style.display = 'block';
+      return;
+    }
+    document.getElementById('authForm').style.display = 'none';
+    document.getElementById('authLoading').style.display = 'block';
+    document.getElementById('authLoading').textContent = 'Đang tải dữ liệu...';
+    const ok = await loadStateFromServer();
+    if(ok) showApp();
+  } catch(err){
+    errEl.textContent = 'Không thể kết nối máy chủ. Tính năng đăng nhập chỉ hoạt động trên bản deploy Vercel (không chạy trên GitHub Pages).';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function logout(){
+  try{ await fetch('/api/logout', {method:'POST'}); } catch(e){}
+  state = null;
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  showLoginForm();
+}
+
+async function checkAuthAndInit(){
+  try{
+    const resp = await fetch('/api/session');
+    const data = await resp.json();
+    if(data.loggedIn){
+      const ok = await loadStateFromServer();
+      if(ok) showApp();
+    } else {
+      showLoginForm();
+    }
+  } catch(err){
+    console.error(err);
+    document.getElementById('authLoading').style.display = 'none';
+    document.getElementById('authForm').style.display = 'block';
+    showLoginForm('Không thể kết nối máy chủ. Tính năng đăng nhập chỉ hoạt động trên bản deploy Vercel (không chạy trên GitHub Pages hoặc khi mở file trực tiếp).');
+  }
 }
 
 function daysUntil(dateStr){
@@ -1085,7 +1208,7 @@ document.addEventListener('wheel', e=>{
   if(document.activeElement && document.activeElement.type === 'number') document.activeElement.blur();
 }, { passive: true });
 
-render();
+checkAuthAndInit();
 setInterval(renderClock, 30000);
 </script>
 </body>
