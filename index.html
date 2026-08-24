@@ -114,9 +114,14 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .tx-tag.borrow{background:var(--amber-dim);color:var(--amber)}
 .tx-note{color:var(--text-dim)}
 .tx-amt{font-family:var(--font-mono);font-weight:600}
-.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:10px;padding:2px 6px}
+.tx-edit,.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:8px;padding:2px 6px}
+.tx-edit:hover{color:var(--mint)}
 .tx-del:hover{color:var(--red)}
 .empty{color:var(--text-faint);font-size:13px;padding:20px 4px;text-align:center;font-family:var(--font-mono)}
+
+/* clickable account cards */
+.credit-card,.wallet-card,.loan-row:not(.head){cursor:pointer}
+.credit-card:hover .name,.wallet-card:hover .name,.loan-row:not(.head):hover .loan-name{color:var(--mint)}
 
 /* buttons */
 button{font-family:var(--font-body);cursor:pointer}
@@ -127,6 +132,8 @@ button{font-family:var(--font-body);cursor:pointer}
 .btn.primary:hover{box-shadow:0 0 16px var(--mint-dim);color:#04120c}
 .btn.small{padding:6px 12px;font-size:12px}
 .btn.ghost{background:none;border-color:var(--line)}
+.btn.danger{background:none;border-color:var(--red);color:var(--red)}
+.btn.danger:hover{background:var(--red-dim);color:var(--red)}
 .fab{position:fixed;bottom:26px;right:26px;background:var(--mint);color:#04120c;border:none;width:56px;height:56px;border-radius:50%;font-size:26px;font-weight:600;box-shadow:0 0 24px var(--mint-dim);z-index:20}
 
 /* modal */
@@ -180,7 +187,7 @@ button{font-family:var(--font-body);cursor:pointer}
 
 <div class="overlay" id="txOverlay">
   <div class="modal">
-    <h3>Giao dịch mới</h3>
+    <h3 id="txModalTitle">Giao dịch mới</h3>
     <div class="tabs">
       <div class="tab active" data-type="expense" onclick="setTxType('expense')">Chi tiêu</div>
       <div class="tab" data-type="repay" onclick="setTxType('repay')">Trả nợ</div>
@@ -229,6 +236,7 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="field"><label>Số dư hiện tại (VNĐ)</label><input type="number" id="accBalance" min="0"></div>
     </div>
     <div class="modal-actions">
+      <button class="btn danger" id="accDeleteBtn" onclick="deleteAccountBtn()" style="display:none;margin-right:auto">Xóa</button>
       <button class="btn ghost" onclick="closeAccountModal()">Hủy</button>
       <button class="btn primary" onclick="submitAccount()">Lưu</button>
     </div>
@@ -336,7 +344,7 @@ function renderCredit(){
     const d = daysUntil(a.due);
     const dueLabel = d < 0 ? 'Đã quá hạn' : d === 0 ? 'Đến hạn hôm nay' : `Còn ${d} ngày`;
     return `
-    <div class="credit-card">
+    <div class="credit-card" onclick="openAccountModal('credit','${a.id}')">
       <div class="ring">
         <svg width="64" height="64">
           <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="5"/>
@@ -360,7 +368,7 @@ function renderLoans(){
     const d = daysUntil(a.due);
     const dueLabel = d < 0 ? 'Quá hạn' : d === 0 ? 'Hôm nay' : `${d} ngày`;
     return `
-    <div class="loan-row">
+    <div class="loan-row" onclick="openAccountModal('loan','${a.id}')">
       <div class="loan-name">${a.name}<div class="loan-progress"><div style="width:${pct}%"></div></div></div>
       <div class="mono">${a.paidTerms}/${a.totalTerms} kỳ</div>
       <div class="mono">${dueLabel}</div>
@@ -372,7 +380,7 @@ function renderLoans(){
 function renderWallets(){
   const wallets = state.accounts.filter(a=>a.type==='wallet');
   document.getElementById('walletGrid').innerHTML = wallets.map(a=>`
-    <div class="frame wallet-card">
+    <div class="frame wallet-card" onclick="openAccountModal('wallet','${a.id}')">
       <div class="name">${a.name}</div>
       <div class="bal">${fmt(a.balance)}</div>
     </div>
@@ -394,6 +402,7 @@ function renderTx(){
       </div>
       <div style="display:flex;align-items:center">
         <span class="tx-amt">${sign}${fmt(t.amount)}</span>
+        <button class="tx-edit" onclick="editTx('${t.id}')" aria-label="Sửa giao dịch">✎</button>
         <button class="tx-del" onclick="deleteTx('${t.id}')" aria-label="Xóa giao dịch">×</button>
       </div>
     </div>`;
@@ -402,21 +411,53 @@ function renderTx(){
 
 /* ---- transaction modal ---- */
 let currentTxType = 'expense';
-function openTxModal(){
-  document.getElementById('txOverlay').classList.add('open');
-  document.getElementById('txAmount').value = '';
-  document.getElementById('txNote').value = '';
-  document.getElementById('txAmountErr').style.display = 'none';
-  setTxType('expense');
+let editingTxId = null;
+
+function applyTxToAccount(acc, type, amount){
+  if(!acc) return;
+  if(acc.type==='wallet'){
+    if(type==='expense') acc.balance -= amount;
+    if(type==='borrow') acc.balance += amount;
+  } else if(acc.type==='credit'){
+    if(type==='expense'||type==='borrow') acc.used += amount;
+    if(type==='repay') acc.used = Math.max(0, acc.used - amount);
+  }
 }
-function closeTxModal(){ document.getElementById('txOverlay').classList.remove('open'); }
+function revertTxFromAccount(acc, type, amount){
+  if(!acc) return;
+  if(acc.type==='wallet'){
+    if(type==='expense') acc.balance += amount;
+    if(type==='borrow') acc.balance -= amount;
+  } else if(acc.type==='credit'){
+    if(type==='expense'||type==='borrow') acc.used = Math.max(0, acc.used - amount);
+    if(type==='repay') acc.used += amount;
+  }
+}
+
+function openTxModal(id){
+  editingTxId = id || null;
+  renderTxAccountOptions();
+  document.getElementById('txOverlay').classList.add('open');
+  document.getElementById('txAmountErr').style.display = 'none';
+
+  const tx = editingTxId ? state.transactions.find(t=>t.id===editingTxId) : null;
+  document.getElementById('txModalTitle').textContent = tx ? 'Sửa giao dịch' : 'Giao dịch mới';
+  document.getElementById('txAmount').value = tx ? tx.amount : '';
+  document.getElementById('txNote').value = tx ? (tx.note || '') : '';
+  if(tx) document.getElementById('txAccount').value = tx.accountId;
+  setTxType(tx ? tx.type : 'expense');
+}
+function editTx(id){ openTxModal(id); }
+function closeTxModal(){ document.getElementById('txOverlay').classList.remove('open'); editingTxId = null; }
 function setTxType(type){
   currentTxType = type;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.type===type));
 }
 function renderTxAccountOptions(){
   const sel = document.getElementById('txAccount');
+  const prev = sel.value;
   sel.innerHTML = state.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+  if(prev) sel.value = prev;
 }
 function submitTx(){
   const amountInput = document.getElementById('txAmount');
@@ -429,24 +470,29 @@ function submitTx(){
   errEl.style.display = 'none';
   const accountId = document.getElementById('txAccount').value;
   const note = document.getElementById('txNote').value.trim();
-  const tx = {id:'t'+Date.now(), accountId, type:currentTxType, amount, note, date:todayISO()};
-  state.transactions.push(tx);
 
-  const acc = state.accounts.find(a=>a.id===accountId);
-  if(acc){
-    if(acc.type==='wallet'){
-      if(currentTxType==='expense') acc.balance -= amount;
-      if(currentTxType==='borrow') acc.balance += amount;
-    } else if(acc.type==='credit'){
-      if(currentTxType==='expense'||currentTxType==='borrow') acc.used += amount;
-      if(currentTxType==='repay') acc.used = Math.max(0, acc.used - amount);
-    }
+  if(editingTxId){
+    const tx = state.transactions.find(t=>t.id===editingTxId);
+    revertTxFromAccount(state.accounts.find(a=>a.id===tx.accountId), tx.type, tx.amount);
+    tx.type = currentTxType;
+    tx.accountId = accountId;
+    tx.amount = amount;
+    tx.note = note;
+    applyTxToAccount(state.accounts.find(a=>a.id===accountId), currentTxType, amount);
+  } else {
+    const tx = {id:'t'+Date.now(), accountId, type:currentTxType, amount, note, date:todayISO()};
+    state.transactions.push(tx);
+    applyTxToAccount(state.accounts.find(a=>a.id===accountId), currentTxType, amount);
   }
   save();
   render();
   closeTxModal();
 }
 function deleteTx(id){
+  const tx = state.transactions.find(t=>t.id===id);
+  if(!tx) return;
+  if(!confirm('Xóa giao dịch này?')) return;
+  revertTxFromAccount(state.accounts.find(a=>a.id===tx.accountId), tx.type, tx.amount);
   state.transactions = state.transactions.filter(t=>t.id!==id);
   save();
   render();
@@ -454,24 +500,44 @@ function deleteTx(id){
 
 /* ---- account modal ---- */
 let currentAccType = 'credit';
-function openAccountModal(type){
+let editingAccountId = null;
+function openAccountModal(type, id){
   currentAccType = type;
-  document.getElementById('accModalTitle').textContent =
-    type==='credit' ? 'Thêm thẻ / ví trả sau' : type==='loan' ? 'Thêm khoản vay trả góp' : 'Thêm ví';
+  editingAccountId = id || null;
+  const acc = editingAccountId ? state.accounts.find(a=>a.id===editingAccountId) : null;
+
+  document.getElementById('accModalTitle').textContent = acc
+    ? (type==='credit' ? 'Sửa thẻ / ví trả sau' : type==='loan' ? 'Sửa khoản vay trả góp' : 'Sửa ví')
+    : (type==='credit' ? 'Thêm thẻ / ví trả sau' : type==='loan' ? 'Thêm khoản vay trả góp' : 'Thêm ví');
   document.querySelectorAll('.acc-fields').forEach(f=>f.style.display='none');
   document.getElementById('accFields' + type.charAt(0).toUpperCase() + type.slice(1)).style.display = 'block';
-  document.getElementById('accName').value = '';
+  document.getElementById('accDeleteBtn').style.display = acc ? 'block' : 'none';
+
+  document.getElementById('accName').value = acc ? acc.name : '';
   document.getElementById('accNameErr').style.display = 'none';
+  if(type==='credit'){
+    document.getElementById('accLimit').value = acc ? acc.limit : '';
+    document.getElementById('accUsed').value = acc ? acc.used : '';
+    document.getElementById('accDue').value = acc ? acc.due : '';
+  } else if(type==='loan'){
+    document.getElementById('accTotalTerms').value = acc ? acc.totalTerms : '';
+    document.getElementById('accPaidTerms').value = acc ? acc.paidTerms : '';
+    document.getElementById('accRate').value = acc ? acc.rate : '';
+    document.getElementById('accLoanDue').value = acc ? acc.due : '';
+  } else {
+    document.getElementById('accBalance').value = acc ? acc.balance : '';
+  }
   document.getElementById('accOverlay').classList.add('open');
 }
-function closeAccountModal(){ document.getElementById('accOverlay').classList.remove('open'); }
+function closeAccountModal(){ document.getElementById('accOverlay').classList.remove('open'); editingAccountId = null; }
 function submitAccount(){
   const name = document.getElementById('accName').value.trim();
   const nameErr = document.getElementById('accNameErr');
   if(!name){ nameErr.style.display = 'block'; return; }
   nameErr.style.display = 'none';
 
-  const id = 'a'+Date.now();
+  const existing = editingAccountId ? state.accounts.find(a=>a.id===editingAccountId) : null;
+  const id = existing ? existing.id : 'a'+Date.now();
   let acc;
   if(currentAccType==='credit'){
     acc = {id, type:'credit', name,
@@ -488,7 +554,20 @@ function submitAccount(){
     acc = {id, type:'wallet', name,
       balance: parseFloat(document.getElementById('accBalance').value) || 0};
   }
-  state.accounts.push(acc);
+
+  if(existing){
+    Object.assign(existing, acc);
+  } else {
+    state.accounts.push(acc);
+  }
+  save();
+  render();
+  closeAccountModal();
+}
+function deleteAccountBtn(){
+  if(!editingAccountId) return;
+  if(!confirm('Xóa nguồn tiền này? Các giao dịch liên quan vẫn được giữ lại trong lịch sử.')) return;
+  state.accounts = state.accounts.filter(a=>a.id!==editingAccountId);
   save();
   render();
   closeAccountModal();
