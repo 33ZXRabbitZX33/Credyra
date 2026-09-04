@@ -124,6 +124,10 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .payoff-header{margin-bottom:14px}
 .payoff-header h3{font-family:var(--font-display);font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}
 .payoff-sub{font-family:var(--font-mono);font-size:11px;color:var(--text-faint)}
+.year-filter{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 14px}
+.year-filter button{background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:5px 12px;border-radius:20px;cursor:pointer;transition:.15s}
+.year-filter button:hover{border-color:var(--violet);color:var(--text)}
+.year-filter button.active{background:var(--violet);border-color:var(--violet);color:#fff}
 .payoff-chart-scroll{overflow-x:auto;padding-bottom:2px}
 .payoff-chart{display:flex;align-items:flex-end;gap:8px;min-width:max-content;padding:0 2px}
 .payoff-bar-col{display:flex;flex-direction:column;align-items:center;width:30px;flex-shrink:0}
@@ -284,6 +288,7 @@ button{font-family:var(--font-body);cursor:pointer}
         <h3>Lộ trình trả nợ hàng tháng</h3>
         <div class="payoff-sub" id="payoffSub"></div>
       </div>
+      <div class="year-filter" id="payoffYearFilter"></div>
       <div class="payoff-chart-scroll"><div class="payoff-chart" id="payoffChart"></div></div>
     </div>
 
@@ -834,18 +839,40 @@ function monthLabel(key){
   return `T${parseInt(m,10)}/${y.slice(2)}`;
 }
 
+let payoffYearFilter = 'all';
+function setPayoffYearFilter(year){
+  payoffYearFilter = year;
+  renderPayoffChart();
+}
+
 function renderPayoffChart(){
-  const schedule = loanPayoffSchedule();
+  const fullSchedule = loanPayoffSchedule();
   const container = document.getElementById('payoffChart');
   const subEl = document.getElementById('payoffSub');
-  if(!schedule.length){
+  const filterEl = document.getElementById('payoffYearFilter');
+
+  if(!fullSchedule.length){
     container.innerHTML = '<div class="empty">Không có khoản vay nào cần trả</div>';
     subEl.textContent = '';
+    filterEl.innerHTML = '';
     return;
   }
-  const totalRemaining = schedule.reduce((s,m) => s + m.amount, 0);
-  const lastMonth = monthLabel(schedule[schedule.length-1].month);
-  subEl.textContent = `Tổng còn phải trả ${fmt(totalRemaining)} · dự kiến hết nợ ${lastMonth} (còn ${schedule.length} tháng)`;
+
+  const years = [...new Set(fullSchedule.map(m => m.month.slice(0,4)))];
+  if(payoffYearFilter !== 'all' && !years.includes(payoffYearFilter)) payoffYearFilter = 'all';
+  filterEl.innerHTML = ['all', ...years].map(y => `
+    <button class="${payoffYearFilter===y ? 'active' : ''}" onclick="setPayoffYearFilter('${y}')">${y==='all' ? 'Tất cả' : y}</button>
+  `).join('');
+
+  const schedule = payoffYearFilter === 'all' ? fullSchedule : fullSchedule.filter(m => m.month.slice(0,4) === payoffYearFilter);
+  const totalFiltered = schedule.reduce((s,m) => s + m.amount, 0);
+
+  if(payoffYearFilter === 'all'){
+    const lastMonth = monthLabel(fullSchedule[fullSchedule.length-1].month);
+    subEl.textContent = `Tổng còn phải trả ${fmt(totalFiltered)} · dự kiến hết nợ ${lastMonth} (còn ${fullSchedule.length} tháng)`;
+  } else {
+    subEl.textContent = `Tổng phải trả trong năm ${payoffYearFilter}: ${fmt(totalFiltered)} (${schedule.length} tháng)`;
+  }
 
   const maxAmount = Math.max(...schedule.map(m => m.amount));
   container.innerHTML = schedule.map((m, i) => {
@@ -857,7 +884,7 @@ function renderPayoffChart(){
       <div class="payoff-bar-track"><div class="payoff-bar" style="height:${h}px" tabindex="0" title="${monthLabel(m.month)}: ${fmt(m.amount)}"></div></div>
       <span class="payoff-month">${monthLabel(m.month)}</span>
     </div>`;
-  }).join('');
+  }).join('') || '<div class="empty">Không có kỳ nào trong năm này</div>';
 }
 
 function renderWallets(){
