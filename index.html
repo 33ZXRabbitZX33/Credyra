@@ -120,6 +120,20 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .facility-bar{height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden}
 .facility-bar div{height:100%}
 
+/* loan payoff chart */
+.payoff-header{margin-bottom:14px}
+.payoff-header h3{font-family:var(--font-display);font-size:13px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px}
+.payoff-sub{font-family:var(--font-mono);font-size:11px;color:var(--text-faint)}
+.payoff-chart-scroll{overflow-x:auto;padding-bottom:2px}
+.payoff-chart{display:flex;align-items:flex-end;gap:8px;min-width:max-content;padding:0 2px}
+.payoff-bar-col{display:flex;flex-direction:column;align-items:center;width:30px;flex-shrink:0}
+.payoff-amt{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-bottom:4px;opacity:0;transition:.15s;white-space:nowrap}
+.payoff-bar-col:hover .payoff-amt,.payoff-bar-col:focus-within .payoff-amt,.payoff-amt.direct{opacity:1}
+.payoff-bar-track{height:120px;display:flex;align-items:flex-end}
+.payoff-bar{width:20px;background:var(--violet);border-radius:4px 4px 0 0;min-height:2px;cursor:pointer;transition:.15s}
+.payoff-bar-col:hover .payoff-bar,.payoff-bar:focus{background:#a48bff;outline:none}
+.payoff-month{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:6px;white-space:nowrap}
+
 /* wallet */
 .wallet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
 .wallet-card .name{font-family:var(--font-display);font-size:14px;margin-bottom:6px}
@@ -263,6 +277,14 @@ button{font-family:var(--font-body);cursor:pointer}
       <div id="loanFacilities"></div>
       <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
       <div id="loanRows"></div>
+    </div>
+
+    <div class="frame" id="payoffFrame" style="margin-top:14px">
+      <div class="payoff-header">
+        <h3>Lộ trình trả nợ hàng tháng</h3>
+        <div class="payoff-sub" id="payoffSub"></div>
+      </div>
+      <div class="payoff-chart-scroll"><div class="payoff-chart" id="payoffChart"></div></div>
     </div>
 
     <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
@@ -446,9 +468,9 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:3, rate:3993010, due:'2026-09-05',
+      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:4, rate:3993010, due:'2026-10-05',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
-      {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:3, rate:199651, due:'2026-09-10',
+      {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:4, rate:199651, due:'2026-10-10',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
       {id:'a8', type:'loan', name:'SEasy #3 (24tr, 26/06)', totalTerms:9, paidTerms:2, rate:3439494, due:'2026-09-26',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
@@ -596,6 +618,7 @@ function render(){
   renderStats();
   renderCredit();
   renderLoans();
+  renderPayoffChart();
   renderWallets();
   renderTx();
   renderTxAccountOptions();
@@ -787,6 +810,53 @@ function renderLoans(){
       <div class="mono">${fmt(a.rate)}</div>
     </div>`;
   }).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
+}
+
+function loanPayoffSchedule(){
+  const loans = state.accounts.filter(a => a.type === 'loan' && a.totalTerms > a.paidTerms);
+  const monthTotals = {};
+  loans.forEach(loan => {
+    const remaining = loan.totalTerms - loan.paidTerms;
+    const [y0, m0] = loan.due.split('-').map(Number);
+    let y = y0, m = m0 - 1;
+    for(let i = 0; i < remaining; i++){
+      const key = `${y}-${String(m+1).padStart(2,'0')}`;
+      monthTotals[key] = (monthTotals[key] || 0) + loan.rate;
+      m += 1;
+      if(m >= 12){ m = 0; y += 1; }
+    }
+  });
+  return Object.keys(monthTotals).sort().map(month => ({month, amount: monthTotals[month]}));
+}
+function monthLabel(key){
+  const [y, m] = key.split('-');
+  return `T${parseInt(m,10)}/${y.slice(2)}`;
+}
+
+function renderPayoffChart(){
+  const schedule = loanPayoffSchedule();
+  const container = document.getElementById('payoffChart');
+  const subEl = document.getElementById('payoffSub');
+  if(!schedule.length){
+    container.innerHTML = '<div class="empty">Không có khoản vay nào cần trả</div>';
+    subEl.textContent = '';
+    return;
+  }
+  const totalRemaining = schedule.reduce((s,m) => s + m.amount, 0);
+  const lastMonth = monthLabel(schedule[schedule.length-1].month);
+  subEl.textContent = `Tổng còn phải trả ${fmt(totalRemaining)} · dự kiến hết nợ ${lastMonth} (còn ${schedule.length} tháng)`;
+
+  const maxAmount = Math.max(...schedule.map(m => m.amount));
+  container.innerHTML = schedule.map((m, i) => {
+    const h = Math.max(2, Math.round((m.amount / maxAmount) * 120));
+    const isEdge = i === 0 || i === schedule.length - 1;
+    return `
+    <div class="payoff-bar-col">
+      <span class="payoff-amt${isEdge ? ' direct' : ''}">${fmt(m.amount)}</span>
+      <div class="payoff-bar-track"><div class="payoff-bar" style="height:${h}px" tabindex="0" title="${monthLabel(m.month)}: ${fmt(m.amount)}"></div></div>
+      <span class="payoff-month">${monthLabel(m.month)}</span>
+    </div>`;
+  }).join('');
 }
 
 function renderWallets(){
