@@ -149,6 +149,20 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .spend-bar-col:hover .spend-bar,.spend-bar:focus{background:#ff7188;outline:none}
 .spend-label{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:6px;white-space:nowrap}
 
+/* expense pie chart */
+.pie-wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:center}
+.pie-chart-holder{position:relative;width:180px;height:180px;flex-shrink:0}
+.pie-chart-holder svg{width:180px;height:180px;display:block}
+.pie-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none}
+.pie-center-val{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text)}
+.pie-center-lbl{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.pie-legend{display:flex;flex-direction:column;gap:10px;flex:1;min-width:200px}
+.pie-legend-row{display:flex;align-items:center;gap:9px;font-size:13px}
+.pie-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.pie-legend-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pie-legend-val{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);white-space:nowrap}
+.pie-legend-pct{color:var(--text-faint)}
+
 /* wallet */
 .wallet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
 .wallet-card .name{font-family:var(--font-display);font-size:14px;margin-bottom:6px}
@@ -389,7 +403,15 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="spend-chart-scroll"><div class="spend-chart" id="dashDayChart"></div></div>
     </div>
 
-    <div class="section-label"><span class="idx">03</span><h2>Khoản chi lớn nhất</h2><div class="rule"></div></div>
+    <div class="section-label"><span class="idx">03</span><h2>Phân bổ theo khoản chi · <span id="dashPieMonthLabel"></span></h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="pie-wrap">
+        <div class="pie-chart-holder" id="dashPieChart"></div>
+        <div class="pie-legend" id="dashPieLegend"></div>
+      </div>
+    </div>
+
+    <div class="section-label"><span class="idx">04</span><h2>Khoản chi lớn nhất</h2><div class="rule"></div></div>
     <div class="frame" id="dashTopList"></div>
   </div>
 
@@ -1337,6 +1359,59 @@ function renderSpendBars(containerId, bars){
   }).join('');
 }
 
+const PIE_COLORS = ['#3987e5', '#d95926', '#199e70', '#e66767'];
+function renderExpensePie(entries){
+  const holder = document.getElementById('dashPieChart');
+  const legendEl = document.getElementById('dashPieLegend');
+
+  const grouped = {};
+  entries.forEach(e => { grouped[e.desc] = (grouped[e.desc] || 0) + e.amount; });
+  let items = Object.entries(grouped).map(([desc, amount]) => ({desc, amount})).sort((a,b) => b.amount - a.amount);
+  const total = items.reduce((s,i) => s + i.amount, 0);
+
+  if(!items.length || total === 0){
+    holder.innerHTML = '<div class="empty">Chưa có chi tiêu nào trong tháng này</div>';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  const MAX_SLICES = 3; // beyond this, color alone stops being reliably distinguishable — fold the tail into "Khác"
+  if(items.length > MAX_SLICES){
+    const head = items.slice(0, MAX_SLICES);
+    const tailSum = items.slice(MAX_SLICES).reduce((s,i) => s + i.amount, 0);
+    items = [...head, {desc: 'Khác', amount: tailSum}];
+  }
+
+  const r = 70, cx = 90, cy = 90, c = 2 * Math.PI * r, gap = 3, strokeW = 26;
+  let offsetAcc = 0;
+  const segments = items.map((it, i) => {
+    const rawLen = (it.amount / total) * c;
+    const segLen = Math.max(0, rawLen - gap);
+    const pct = Math.round((it.amount / total) * 100);
+    const svg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${PIE_COLORS[i]}" stroke-width="${strokeW}" stroke-dasharray="${segLen} ${c - segLen}" stroke-dashoffset="${-offsetAcc}" stroke-linecap="round"><title>${it.desc}: ${fmt(it.amount)} (${pct}%)</title></circle>`;
+    offsetAcc += rawLen;
+    return svg;
+  }).join('');
+
+  holder.innerHTML = `
+    <svg viewBox="0 0 180 180" style="transform:rotate(-90deg)">${segments}</svg>
+    <div class="pie-center">
+      <div class="pie-center-val">${fmt(total)}</div>
+      <div class="pie-center-lbl">Tổng chi tiêu</div>
+    </div>
+  `;
+
+  legendEl.innerHTML = items.map((it, i) => {
+    const pct = Math.round((it.amount / total) * 100);
+    return `
+    <div class="pie-legend-row">
+      <span class="pie-dot" style="background:${PIE_COLORS[i]}"></span>
+      <span class="pie-legend-name">${it.desc}</span>
+      <span class="pie-legend-val">${fmt(it.amount)} <span class="pie-legend-pct">(${pct}%)</span></span>
+    </div>`;
+  }).join('');
+}
+
 function renderDash(){
   const list = state.dailyExpenses || [];
   const todayY = parseInt(todayISO().slice(0, 4), 10);
@@ -1363,6 +1438,9 @@ function renderDash(){
     return { label: String(day), amount };
   });
   renderSpendBars('dashDayChart', dayBars);
+
+  document.getElementById('dashPieMonthLabel').textContent = `Tháng ${dm}/${dy}`;
+  renderExpensePie(list.filter(e => e.date.slice(0,7) === dashDayMonth));
 
   const top = [...list].sort((a,b) => b.amount - a.amount).slice(0, 8);
   document.getElementById('dashTopList').innerHTML = top.map(e => `
