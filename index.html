@@ -339,11 +339,12 @@ button{font-family:var(--font-body);cursor:pointer}
     <div class="frame">
       <div class="field">
         <label>Nội dung</label>
-        <input type="text" id="dailyDesc" placeholder="VD: Đi ăn, đi chơi, xem phim...">
+        <input type="text" id="dailyDesc" list="dailyDescList" placeholder="VD: Đi ăn, đi chơi, xem phim..." onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
+        <datalist id="dailyDescList"></datalist>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
-        <input type="number" id="dailyAmount" min="0">
+        <input type="number" id="dailyAmount" min="0" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
       </div>
       <div class="err" id="dailyErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
       <div class="btn-row">
@@ -376,11 +377,12 @@ button{font-family:var(--font-body);cursor:pointer}
       </div>
       <div class="field">
         <label>Nội dung</label>
-        <input type="text" id="ytDesc" placeholder="VD: AdSense tháng 9, mua thiết bị quay...">
+        <input type="text" id="ytDesc" list="ytDescList" placeholder="VD: AdSense tháng 9, mua thiết bị quay..." onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('yt');}">
+        <datalist id="ytDescList"></datalist>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
-        <input type="number" id="ytAmount" min="0">
+        <input type="number" id="ytAmount" min="0" onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('yt');}">
       </div>
       <div class="err" id="ytErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
       <div class="btn-row">
@@ -413,11 +415,12 @@ button{font-family:var(--font-body);cursor:pointer}
       </div>
       <div class="field">
         <label>Nội dung</label>
-        <input type="text" id="dsDesc" placeholder="VD: Đơn hàng #123, tiền ads, nhập hàng...">
+        <input type="text" id="dsDesc" list="dsDescList" placeholder="VD: Đơn hàng #123, tiền ads, nhập hàng..." onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('ds');}">
+        <datalist id="dsDescList"></datalist>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
-        <input type="number" id="dsAmount" min="0">
+        <input type="number" id="dsAmount" min="0" onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('ds');}">
       </div>
       <div class="err" id="dsErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
       <div class="btn-row">
@@ -1159,8 +1162,19 @@ function dateForSelectedMonth(){
   return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 }
 
+function updateDescDatalist(datalistId, entries){
+  const seen = new Set();
+  const unique = [];
+  for(let i = entries.length - 1; i >= 0; i--){
+    const d = entries[i].desc;
+    if(d && !seen.has(d)){ seen.add(d); unique.push(d); }
+  }
+  document.getElementById(datalistId).innerHTML = unique.map(d => `<option value="${d.replace(/"/g,'&quot;')}"></option>`).join('');
+}
+
 function renderDaily(){
   const list = state.dailyExpenses || [];
+  updateDescDatalist('dailyDescList', list);
   const todayY = parseInt(todayISO().slice(0, 4), 10);
   const todayM = parseInt(todayISO().slice(5, 7), 10);
   if(dailyViewYear === null) dailyViewYear = todayY;
@@ -1288,6 +1302,7 @@ function renderBiz(key){
   const cfg = BIZ[key];
   const bs = bizState[key];
   const list = state[cfg.stateKey] || [];
+  updateDescDatalist(`${key}DescList`, list);
   const todayY = parseInt(todayISO().slice(0, 4), 10);
   const todayM = parseInt(todayISO().slice(5, 7), 10);
   if(bs.viewYear === null) bs.viewYear = todayY;
