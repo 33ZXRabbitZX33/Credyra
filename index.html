@@ -153,6 +153,18 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .tx-tag.borrow{background:var(--amber-dim);color:var(--amber)}
 .tx-note{color:var(--text-dim)}
 .daily-date{font-family:var(--font-mono);font-size:11px;color:var(--text-faint)}
+
+/* month picker (Chi tiêu tab) */
+.year-nav{display:flex;align-items:center;gap:14px;margin-bottom:14px;font-family:var(--font-mono);font-size:14px;color:var(--text)}
+.year-nav button{padding:4px 12px}
+.month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.month-tile{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:14px 12px;cursor:pointer;transition:.15s}
+.month-tile:hover{border-color:var(--violet)}
+.month-tile.active{border-color:var(--violet);background:var(--violet-dim)}
+.month-tile .mname{font-family:var(--font-display);font-size:13px;letter-spacing:.5px;margin-bottom:6px;color:var(--text)}
+.month-tile .mname .dot{color:var(--mint)}
+.month-tile .mtotal{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text)}
+.month-tile .mtotal.zero{color:var(--text-faint);font-weight:400}
 .tx-amt{font-family:var(--font-mono);font-weight:600}
 .tx-edit,.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:8px;padding:2px 6px}
 .tx-edit:hover{color:var(--mint)}
@@ -307,9 +319,19 @@ button{font-family:var(--font-body);cursor:pointer}
   </div>
 
   <div id="tabDaily" class="tabpage" style="display:none">
-    <div class="stats" id="dailyStatGrid"></div>
+    <div class="section-label"><span class="idx">01</span><h2>Chọn tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="shiftDailyYear(-1)">‹</button>
+        <span id="dailyYearLabel"></span>
+        <button class="btn small ghost" onclick="shiftDailyYear(1)">›</button>
+      </div>
+      <div class="month-grid" id="monthGrid"></div>
+    </div>
 
-    <div class="section-label"><span class="idx">01</span><h2>Chi tiêu hàng ngày</h2><div class="rule"></div></div>
+    <div class="stats" id="dailyStatGrid" style="margin-top:14px"></div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="dailyMonthTitle">Chi tiêu tháng</h2><div class="rule"></div></div>
     <div class="frame">
       <div class="field">
         <label>Nội dung</label>
@@ -457,7 +479,7 @@ button{font-family:var(--font-body);cursor:pointer}
 
 <script>
 const fmt = n => Math.round(n).toLocaleString('vi-VN') + '₫';
-const todayISO = () => new Date().toISOString().slice(0,10);
+const todayISO = () => localDateStr(new Date());
 
 function seed(){
   return {
@@ -493,7 +515,7 @@ function seed(){
     dailyExpenses: []
   };
 }
-function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return localDateStr(d)}
 
 let state = null;
 
@@ -1033,15 +1055,58 @@ function shortDate(iso){
   return `${d}/${m}`;
 }
 
+let dailyViewYear = null;
+let selectedMonthKey = null;
+
+function shiftDailyYear(delta){
+  dailyViewYear += delta;
+  renderDaily();
+}
+function selectMonth(monthKey){
+  selectedMonthKey = monthKey;
+  cancelDailyEdit();
+  renderDaily();
+}
+function dateForSelectedMonth(){
+  const [y, m] = selectedMonthKey.split('-').map(Number);
+  const todayDay = parseInt(todayISO().slice(8, 10), 10);
+  const lastDay = new Date(y, m, 0).getDate();
+  const day = Math.min(todayDay, lastDay);
+  return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
 function renderDaily(){
   const list = state.dailyExpenses || [];
-  const curMonth = todayISO().slice(0, 7);
-  const monthTotal = list.filter(e => e.date.slice(0, 7) === curMonth).reduce((s, e) => s + e.amount, 0);
+  const todayY = parseInt(todayISO().slice(0, 4), 10);
+  const todayM = parseInt(todayISO().slice(5, 7), 10);
+  if(dailyViewYear === null) dailyViewYear = todayY;
+  if(selectedMonthKey === null) selectedMonthKey = todayISO().slice(0, 7);
+
+  document.getElementById('dailyYearLabel').textContent = dailyViewYear;
+
+  document.getElementById('monthGrid').innerHTML = Array.from({length: 12}, (_, idx) => {
+    const m = idx + 1;
+    const key = `${dailyViewYear}-${String(m).padStart(2,'0')}`;
+    const total = list.filter(e => e.date.slice(0,7) === key).reduce((s,e) => s + e.amount, 0);
+    const isCurrent = dailyViewYear === todayY && m === todayM;
+    const isActive = key === selectedMonthKey;
+    return `
+    <div class="month-tile${isActive ? ' active' : ''}" onclick="selectMonth('${key}')">
+      <div class="mname">Tháng ${m}${isCurrent ? ' <span class="dot">•</span>' : ''}</div>
+      <div class="mtotal${total === 0 ? ' zero' : ''}">${total ? fmt(total) : '—'}</div>
+    </div>`;
+  }).join('');
+
+  const [sy, sm] = selectedMonthKey.split('-');
+  document.getElementById('dailyMonthTitle').textContent = `Chi tiêu tháng ${parseInt(sm,10)}/${sy}`;
+
+  const monthEntries = list.filter(e => e.date.slice(0,7) === selectedMonthKey);
+  const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
   document.getElementById('dailyStatGrid').innerHTML = `
-    <div class="stat neg"><div class="lbl">Tổng chi tiêu tháng này</div><div class="val">${fmt(monthTotal)}</div></div>
+    <div class="stat neg"><div class="lbl">Tổng chi tiêu tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(monthTotal)}</div></div>
   `;
 
-  const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const sorted = [...monthEntries].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   document.getElementById('dailyList').innerHTML = sorted.map(e => `
     <div class="tx-item" onclick="editDaily('${e.id}')" style="cursor:pointer">
       <div class="tx-left">
@@ -1053,7 +1118,7 @@ function renderDaily(){
         <button class="tx-del" onclick="event.stopPropagation(); deleteDaily('${e.id}')" aria-label="Xóa">×</button>
       </div>
     </div>
-  `).join('') || '<div class="empty">Chưa có chi tiêu nào</div>';
+  `).join('') || '<div class="empty">Chưa có chi tiêu nào trong tháng này</div>';
 }
 
 let editingDailyId = null;
@@ -1072,7 +1137,7 @@ function submitDaily(){
     e.desc = desc;
     e.amount = amount;
   } else {
-    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: todayISO()});
+    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: dateForSelectedMonth()});
   }
   save();
   cancelDailyEdit();
