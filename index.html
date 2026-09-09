@@ -138,6 +138,17 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .payoff-bar-col:hover .payoff-bar,.payoff-bar:focus{background:#a48bff;outline:none}
 .payoff-month{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:6px;white-space:nowrap}
 
+/* spending charts (Biểu đồ tab) */
+.spend-chart-scroll{overflow-x:auto;padding-bottom:2px}
+.spend-chart{display:flex;align-items:flex-end;gap:8px;min-width:max-content;padding:0 2px}
+.spend-bar-col{display:flex;flex-direction:column;align-items:center;width:30px;flex-shrink:0}
+.spend-amt{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-bottom:4px;opacity:0;transition:.15s;white-space:nowrap}
+.spend-bar-col:hover .spend-amt,.spend-bar-col:focus-within .spend-amt,.spend-amt.direct{opacity:1}
+.spend-bar-track{height:120px;display:flex;align-items:flex-end}
+.spend-bar{width:20px;background:var(--red);border-radius:4px 4px 0 0;min-height:2px;cursor:pointer;transition:.15s}
+.spend-bar-col:hover .spend-bar,.spend-bar:focus{background:#ff7188;outline:none}
+.spend-label{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:6px;white-space:nowrap}
+
 /* wallet */
 .wallet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
 .wallet-card .name{font-family:var(--font-display);font-size:14px;margin-bottom:6px}
@@ -282,6 +293,7 @@ button{font-family:var(--font-body);cursor:pointer}
     <button class="navtab active" data-tab="dashboard" onclick="switchTab('dashboard')">Tổng quan</button>
     <button class="navtab" data-tab="expenses" onclick="switchTab('expenses')">Chi phí cố định</button>
     <button class="navtab" data-tab="daily" onclick="switchTab('daily')">Chi tiêu</button>
+    <button class="navtab" data-tab="chart" onclick="switchTab('chart')">Biểu đồ</button>
     <button class="navtab" data-tab="yt" onclick="switchTab('yt')">YouTube</button>
     <button class="navtab" data-tab="ds" onclick="switchTab('ds')">Dropship</button>
   </div>
@@ -354,6 +366,31 @@ button{font-family:var(--font-body);cursor:pointer}
     </div>
 
     <div class="frame" id="dailyList" style="margin-top:14px"></div>
+  </div>
+
+  <div id="tabChart" class="tabpage" style="display:none">
+    <div class="section-label"><span class="idx">01</span><h2>Chi tiêu theo tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="dashShiftYear(-1)">‹</button>
+        <span id="dashYearLabel"></span>
+        <button class="btn small ghost" onclick="dashShiftYear(1)">›</button>
+      </div>
+      <div class="spend-chart-scroll"><div class="spend-chart" id="dashMonthChart"></div></div>
+    </div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="dashDayTitle">Chi tiêu theo ngày</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="dashShiftDayMonth(-1)">‹</button>
+        <span id="dashDayMonthLabel"></span>
+        <button class="btn small ghost" onclick="dashShiftDayMonth(1)">›</button>
+      </div>
+      <div class="spend-chart-scroll"><div class="spend-chart" id="dashDayChart"></div></div>
+    </div>
+
+    <div class="section-label"><span class="idx">03</span><h2>Khoản chi lớn nhất</h2><div class="rule"></div></div>
+    <div class="frame" id="dashTopList"></div>
   </div>
 
   <div id="tabYt" class="tabpage" style="display:none">
@@ -737,6 +774,7 @@ function render(){
   renderTxAccountOptions();
   renderExpenses();
   renderDaily();
+  renderDash();
   renderBiz('yt');
   renderBiz('ds');
 }
@@ -1265,6 +1303,77 @@ function deleteDaily(id){
   state.dailyExpenses = state.dailyExpenses.filter(x => x.id !== id);
   save();
   render();
+}
+
+/* ---- spending charts (Biểu đồ tab, Chi tiêu data only) ---- */
+let dashViewYear = null;
+let dashDayMonth = null;
+
+function dashShiftYear(delta){
+  dashViewYear += delta;
+  renderDash();
+}
+function dashShiftDayMonth(delta){
+  const [y, m] = dashDayMonth.split('-').map(Number);
+  let ny = y, nm = m + delta;
+  if(nm < 1){ nm = 12; ny -= 1; }
+  if(nm > 12){ nm = 1; ny += 1; }
+  dashDayMonth = `${ny}-${String(nm).padStart(2,'0')}`;
+  renderDash();
+}
+
+function renderSpendBars(containerId, bars){
+  const maxAmount = Math.max(1, ...bars.map(b => b.amount));
+  const peak = Math.max(...bars.map(b => b.amount));
+  document.getElementById(containerId).innerHTML = bars.map(b => {
+    const h = Math.max(2, Math.round((b.amount / maxAmount) * 120));
+    const isPeak = b.amount === peak && peak > 0;
+    return `
+    <div class="spend-bar-col">
+      <span class="spend-amt${isPeak ? ' direct' : ''}">${b.amount ? fmt(b.amount) : ''}</span>
+      <div class="spend-bar-track"><div class="spend-bar" style="height:${h}px" tabindex="0" title="${b.label}: ${fmt(b.amount)}"></div></div>
+      <span class="spend-label">${b.label}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderDash(){
+  const list = state.dailyExpenses || [];
+  const todayY = parseInt(todayISO().slice(0, 4), 10);
+
+  if(dashViewYear === null) dashViewYear = todayY;
+  document.getElementById('dashYearLabel').textContent = dashViewYear;
+  const monthBars = Array.from({length: 12}, (_, idx) => {
+    const m = idx + 1;
+    const key = `${dashViewYear}-${String(m).padStart(2,'0')}`;
+    const amount = list.filter(e => e.date.slice(0,7) === key).reduce((s,e) => s + e.amount, 0);
+    return { label: `T${m}`, amount };
+  });
+  renderSpendBars('dashMonthChart', monthBars);
+
+  if(dashDayMonth === null) dashDayMonth = todayISO().slice(0, 7);
+  const [dy, dm] = dashDayMonth.split('-').map(Number);
+  document.getElementById('dashDayMonthLabel').textContent = `Tháng ${dm}/${dy}`;
+  document.getElementById('dashDayTitle').textContent = `Chi tiêu theo ngày · Tháng ${dm}/${dy}`;
+  const daysInMonth = new Date(dy, dm, 0).getDate();
+  const dayBars = Array.from({length: daysInMonth}, (_, idx) => {
+    const day = idx + 1;
+    const dateKey = `${dy}-${String(dm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const amount = list.filter(e => e.date === dateKey).reduce((s,e) => s + e.amount, 0);
+    return { label: String(day), amount };
+  });
+  renderSpendBars('dashDayChart', dayBars);
+
+  const top = [...list].sort((a,b) => b.amount - a.amount).slice(0, 8);
+  document.getElementById('dashTopList').innerHTML = top.map(e => `
+    <div class="tx-item">
+      <div class="tx-left">
+        <span class="daily-date">${shortDate(e.date)}</span>
+        <span>${e.desc}</span>
+      </div>
+      <span class="tx-amt">${fmt(e.amount)}</span>
+    </div>
+  `).join('') || '<div class="empty">Chưa có chi tiêu nào</div>';
 }
 
 /* ---- business ledgers (thu/chi note-books, e.g. YouTube / Dropship) ---- */
