@@ -165,6 +165,8 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .month-tile .mname .dot{color:var(--mint)}
 .month-tile .mtotal{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text)}
 .month-tile .mtotal.zero{color:var(--text-faint);font-weight:400}
+.month-tile .mtotal.pos{color:var(--mint)}
+.month-tile .mtotal.neg{color:var(--red)}
 .tx-amt{font-family:var(--font-mono);font-weight:600}
 .tx-edit,.tx-del{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;margin-left:8px;padding:2px 6px}
 .tx-edit:hover{color:var(--mint)}
@@ -280,6 +282,8 @@ button{font-family:var(--font-body);cursor:pointer}
     <button class="navtab active" data-tab="dashboard" onclick="switchTab('dashboard')">Tổng quan</button>
     <button class="navtab" data-tab="expenses" onclick="switchTab('expenses')">Chi phí cố định</button>
     <button class="navtab" data-tab="daily" onclick="switchTab('daily')">Chi tiêu</button>
+    <button class="navtab" data-tab="yt" onclick="switchTab('yt')">YouTube</button>
+    <button class="navtab" data-tab="ds" onclick="switchTab('ds')">Dropship</button>
   </div>
 
   <div id="tabDashboard" class="tabpage">
@@ -349,6 +353,80 @@ button{font-family:var(--font-body);cursor:pointer}
     </div>
 
     <div class="frame" id="dailyList" style="margin-top:14px"></div>
+  </div>
+
+  <div id="tabYt" class="tabpage" style="display:none">
+    <div class="section-label"><span class="idx">01</span><h2>Chọn tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="bizShiftYear('yt',-1)">‹</button>
+        <span id="ytYearLabel"></span>
+        <button class="btn small ghost" onclick="bizShiftYear('yt',1)">›</button>
+      </div>
+      <div class="month-grid" id="ytMonthGrid"></div>
+    </div>
+
+    <div class="stats" id="ytStatGrid" style="margin-top:14px"></div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="ytMonthTitle">YouTube tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="tabs" id="ytTypeTabs">
+        <div class="tab active" data-type="thu" onclick="bizSetType('yt','thu')">Thu</div>
+        <div class="tab" data-type="chi" onclick="bizSetType('yt','chi')">Chi</div>
+      </div>
+      <div class="field">
+        <label>Nội dung</label>
+        <input type="text" id="ytDesc" placeholder="VD: AdSense tháng 9, mua thiết bị quay...">
+      </div>
+      <div class="field">
+        <label>Số tiền (VNĐ)</label>
+        <input type="number" id="ytAmount" min="0">
+      </div>
+      <div class="err" id="ytErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
+      <div class="btn-row">
+        <button class="btn ghost" id="ytCancelBtn" onclick="bizCancelEdit('yt')" style="display:none">Hủy</button>
+        <button class="btn primary" id="ytSubmitBtn" onclick="bizSubmit('yt')">+ Thêm</button>
+      </div>
+    </div>
+
+    <div class="frame" id="ytList" style="margin-top:14px"></div>
+  </div>
+
+  <div id="tabDs" class="tabpage" style="display:none">
+    <div class="section-label"><span class="idx">01</span><h2>Chọn tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="bizShiftYear('ds',-1)">‹</button>
+        <span id="dsYearLabel"></span>
+        <button class="btn small ghost" onclick="bizShiftYear('ds',1)">›</button>
+      </div>
+      <div class="month-grid" id="dsMonthGrid"></div>
+    </div>
+
+    <div class="stats" id="dsStatGrid" style="margin-top:14px"></div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="dsMonthTitle">Dropship tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="tabs" id="dsTypeTabs">
+        <div class="tab active" data-type="thu" onclick="bizSetType('ds','thu')">Thu</div>
+        <div class="tab" data-type="chi" onclick="bizSetType('ds','chi')">Chi</div>
+      </div>
+      <div class="field">
+        <label>Nội dung</label>
+        <input type="text" id="dsDesc" placeholder="VD: Đơn hàng #123, tiền ads, nhập hàng...">
+      </div>
+      <div class="field">
+        <label>Số tiền (VNĐ)</label>
+        <input type="number" id="dsAmount" min="0">
+      </div>
+      <div class="err" id="dsErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
+      <div class="btn-row">
+        <button class="btn ghost" id="dsCancelBtn" onclick="bizCancelEdit('ds')" style="display:none">Hủy</button>
+        <button class="btn primary" id="dsSubmitBtn" onclick="bizSubmit('ds')">+ Thêm</button>
+      </div>
+    </div>
+
+    <div class="frame" id="dsList" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -512,7 +590,9 @@ function seed(){
       {id:'t3', accountId:'a3', type:'repay', amount:2100000, note:'Trả kỳ tháng trước', date:addDays(-5)},
     ],
     expenses: [],
-    dailyExpenses: []
+    dailyExpenses: [],
+    youtube: [],
+    dropship: []
   };
 }
 function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return localDateStr(d)}
@@ -552,6 +632,8 @@ async function loadStateFromServer(){
   state = data.state || seed();
   if(!state.expenses) state.expenses = [];
   if(!state.dailyExpenses) state.dailyExpenses = [];
+  if(!state.youtube) state.youtube = [];
+  if(!state.dropship) state.dropship = [];
   return true;
 }
 
@@ -652,6 +734,8 @@ function render(){
   renderTxAccountOptions();
   renderExpenses();
   renderDaily();
+  renderBiz('yt');
+  renderBiz('ds');
 }
 
 function switchTab(tab){
@@ -1165,6 +1249,149 @@ function deleteDaily(id){
   if(!confirm('Xóa khoản chi tiêu này?')) return;
   if(editingDailyId === id) cancelDailyEdit();
   state.dailyExpenses = state.dailyExpenses.filter(x => x.id !== id);
+  save();
+  render();
+}
+
+/* ---- business ledgers (thu/chi note-books, e.g. YouTube / Dropship) ---- */
+const BIZ = {
+  yt: { stateKey: 'youtube', label: 'YouTube' },
+  ds: { stateKey: 'dropship', label: 'Dropship' },
+};
+const bizState = {
+  yt: { viewYear: null, selectedMonth: null, editingId: null, currentType: 'thu' },
+  ds: { viewYear: null, selectedMonth: null, editingId: null, currentType: 'thu' },
+};
+
+function bizShiftYear(key, delta){
+  bizState[key].viewYear += delta;
+  renderBiz(key);
+}
+function bizSelectMonth(key, monthKey){
+  bizState[key].selectedMonth = monthKey;
+  bizCancelEdit(key);
+  renderBiz(key);
+}
+function bizDateForSelectedMonth(key){
+  const [y, m] = bizState[key].selectedMonth.split('-').map(Number);
+  const todayDay = parseInt(todayISO().slice(8, 10), 10);
+  const lastDay = new Date(y, m, 0).getDate();
+  const day = Math.min(todayDay, lastDay);
+  return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function bizSetType(key, type){
+  bizState[key].currentType = type;
+  document.querySelectorAll(`#${key}TypeTabs .tab`).forEach(t => t.classList.toggle('active', t.dataset.type === type));
+}
+
+function renderBiz(key){
+  const cfg = BIZ[key];
+  const bs = bizState[key];
+  const list = state[cfg.stateKey] || [];
+  const todayY = parseInt(todayISO().slice(0, 4), 10);
+  const todayM = parseInt(todayISO().slice(5, 7), 10);
+  if(bs.viewYear === null) bs.viewYear = todayY;
+  if(bs.selectedMonth === null) bs.selectedMonth = todayISO().slice(0, 7);
+
+  document.getElementById(`${key}YearLabel`).textContent = bs.viewYear;
+
+  document.getElementById(`${key}MonthGrid`).innerHTML = Array.from({length: 12}, (_, idx) => {
+    const m = idx + 1;
+    const mkey = `${bs.viewYear}-${String(m).padStart(2,'0')}`;
+    const net = list.filter(e => e.date.slice(0,7) === mkey)
+      .reduce((s,e) => s + (e.type === 'thu' ? e.amount : -e.amount), 0);
+    const isCurrent = bs.viewYear === todayY && m === todayM;
+    const isActive = mkey === bs.selectedMonth;
+    const netCls = net > 0 ? 'pos' : net < 0 ? 'neg' : 'zero';
+    return `
+    <div class="month-tile${isActive ? ' active' : ''}" onclick="bizSelectMonth('${key}','${mkey}')">
+      <div class="mname">Tháng ${m}${isCurrent ? ' <span class="dot">•</span>' : ''}</div>
+      <div class="mtotal ${netCls}">${net !== 0 ? (net > 0 ? '+' : '') + fmt(net) : '—'}</div>
+    </div>`;
+  }).join('');
+
+  const [sy, sm] = bs.selectedMonth.split('-');
+  document.getElementById(`${key}MonthTitle`).textContent = `${cfg.label} tháng ${parseInt(sm,10)}/${sy}`;
+
+  const monthEntries = list.filter(e => e.date.slice(0,7) === bs.selectedMonth);
+  const thu = monthEntries.filter(e => e.type === 'thu').reduce((s,e) => s + e.amount, 0);
+  const chi = monthEntries.filter(e => e.type === 'chi').reduce((s,e) => s + e.amount, 0);
+  document.getElementById(`${key}StatGrid`).innerHTML = `
+    <div class="stat pos"><div class="lbl">Thu tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(thu)}</div></div>
+    <div class="stat neg"><div class="lbl">Chi tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(chi)}</div></div>
+    <div class="stat ${thu - chi >= 0 ? 'pos' : 'neg'}"><div class="lbl">Lợi nhuận tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(thu - chi)}</div></div>
+  `;
+
+  const sorted = [...monthEntries].sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  document.getElementById(`${key}List`).innerHTML = sorted.map(e => {
+    const sign = e.type === 'thu' ? '+' : '−';
+    return `
+    <div class="tx-item" onclick="bizEdit('${key}','${e.id}')" style="cursor:pointer">
+      <div class="tx-left">
+        <span class="tx-tag ${e.type === 'thu' ? 'repay' : 'expense'}">${e.type === 'thu' ? 'Thu' : 'Chi'}</span>
+        <span class="daily-date">${shortDate(e.date)}</span>
+        <span>${e.desc}</span>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="tx-amt">${sign}${fmt(e.amount)}</span>
+        <button class="tx-del" onclick="event.stopPropagation(); bizDelete('${key}','${e.id}')" aria-label="Xóa">×</button>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Chưa có ghi chú nào trong tháng này</div>';
+}
+
+function bizSubmit(key){
+  const cfg = BIZ[key];
+  const bs = bizState[key];
+  const desc = document.getElementById(`${key}Desc`).value.trim();
+  const amount = parseFloat(document.getElementById(`${key}Amount`).value);
+  const errEl = document.getElementById(`${key}Err`);
+  if(!desc || !amount || amount <= 0){
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  if(bs.editingId){
+    const e = state[cfg.stateKey].find(x => x.id === bs.editingId);
+    e.desc = desc;
+    e.amount = amount;
+    e.type = bs.currentType;
+  } else {
+    state[cfg.stateKey].push({id: key + Date.now(), desc, amount, type: bs.currentType, date: bizDateForSelectedMonth(key)});
+  }
+  save();
+  bizCancelEdit(key);
+  render();
+}
+function bizEdit(key, id){
+  const cfg = BIZ[key];
+  const bs = bizState[key];
+  const e = state[cfg.stateKey].find(x => x.id === id);
+  if(!e) return;
+  bs.editingId = id;
+  document.getElementById(`${key}Desc`).value = e.desc;
+  document.getElementById(`${key}Amount`).value = e.amount;
+  bizSetType(key, e.type);
+  document.getElementById(`${key}Err`).style.display = 'none';
+  document.getElementById(`${key}SubmitBtn`).textContent = 'Lưu thay đổi';
+  document.getElementById(`${key}CancelBtn`).style.display = 'inline-flex';
+}
+function bizCancelEdit(key){
+  const bs = bizState[key];
+  bs.editingId = null;
+  document.getElementById(`${key}Desc`).value = '';
+  document.getElementById(`${key}Amount`).value = '';
+  bizSetType(key, 'thu');
+  document.getElementById(`${key}Err`).style.display = 'none';
+  document.getElementById(`${key}SubmitBtn`).textContent = '+ Thêm';
+  document.getElementById(`${key}CancelBtn`).style.display = 'none';
+}
+function bizDelete(key, id){
+  if(!confirm('Xóa mục này?')) return;
+  const bs = bizState[key];
+  if(bs.editingId === id) bizCancelEdit(key);
+  state[BIZ[key].stateKey] = state[BIZ[key].stateKey].filter(x => x.id !== id);
   save();
   render();
 }
