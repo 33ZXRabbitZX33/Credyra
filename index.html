@@ -385,6 +385,7 @@ button{font-family:var(--font-body);cursor:pointer}
         <label>Nội dung</label>
         <input type="text" id="dailyDesc" list="dailyDescList" placeholder="VD: Ăn, An vat, Grab..." oninput="updateCatHint()" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
         <datalist id="dailyDescList"></datalist>
+        <div class="field-hint" id="dailyFixedHint" style="display:none;margin-top:6px;color:var(--amber)"></div>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
@@ -1292,8 +1293,13 @@ function dateForSelectedMonth(dayOverride){
 }
 function updateCatHint(){
   const sel = document.getElementById('dailyCat');
-  const guess = guessCategory(document.getElementById('dailyDesc').value);
-  sel.options[0].textContent = `Tự động (${guess})`;
+  const desc = document.getElementById('dailyDesc').value;
+  sel.options[0].textContent = `Tự động (${guessCategory(desc)})`;
+  const key = normVi(desc).trim();
+  const fixed = key && (state.expenses || []).find(x => normVi(x.name).trim() === key);
+  const hint = document.getElementById('dailyFixedHint');
+  hint.style.display = fixed ? 'block' : 'none';
+  if(fixed) hint.textContent = `"${fixed.name}" đã có trong Chi phí cố định (${fmt(fixed.amount)}) — không cần ghi lại ở đây.`;
 }
 function pickQuickDesc(desc){
   document.getElementById('dailyDesc').value = desc;
@@ -1579,13 +1585,13 @@ function renderDash(){
 
   const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
   const prevTotal = list.filter(e => e.date.slice(0,7) === prevMonthKey(dashDayMonth)).reduce((s,e) => s + e.amount, 0);
-  const fixedLike = monthEntries.filter(e => ['App & subscription','Hóa đơn & dịch vụ'].includes(categoryOf(e))).reduce((s,e) => s + e.amount, 0);
+  const fixedMonthly = (state.expenses || []).reduce((s,x) => s + x.amount / (x.cycleMonths || 1), 0);
   const delta = prevTotal ? Math.round((monthTotal - prevTotal) / prevTotal * 100) : null;
   document.getElementById('dashKpis').innerHTML = `
     <div class="stat neg"><div class="lbl">Tổng chi tháng ${dm}/${dy}</div><div class="val">${fmt(monthTotal)}</div></div>
     <div class="stat warn"><div class="lbl">Trung bình / ngày</div><div class="val">${fmt(monthTotal / daysCounted(dashDayMonth))}</div></div>
     <div class="stat ${delta !== null && delta > 0 ? 'neg' : 'pos'}"><div class="lbl">So với tháng trước</div><div class="val">${delta === null ? '—' : (delta >= 0 ? '+' : '') + delta + '%'}</div></div>
-    <div class="stat"><div class="lbl">Hóa đơn + app định kỳ</div><div class="val">${fmt(fixedLike)}</div></div>
+    <div class="stat"><div class="lbl">+ Chi phí cố định / tháng</div><div class="val">${fmt(fixedMonthly)}</div></div>
   `;
 
   const top = [...monthEntries].sort((a,b) => b.amount - a.amount).slice(0, 8);
