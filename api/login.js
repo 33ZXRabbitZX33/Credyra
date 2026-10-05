@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createSessionCookie } = require('./_auth');
+const { lockedMinutes, recordFailure, recordSuccess } = require('./_loginGuard');
 
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -15,15 +16,27 @@ module.exports = async (req, res) => {
     return;
   }
 
+  const locked = await lockedMinutes(req);
+  if (locked) {
+    res.status(429).json({ error: `Đăng nhập sai quá nhiều lần. Thử lại sau ${locked} phút.` });
+    return;
+  }
+
   const { username, password } = req.body || {};
   const userOk = safeEqual(username, process.env.AUTH_USERNAME || '');
   const passOk = safeEqual(password, process.env.AUTH_PASSWORD || '');
 
   if (!userOk || !passOk) {
-    res.status(401).json({ error: 'Sai tài khoản hoặc mật khẩu' });
+    const r = await recordFailure(req);
+    res.status(r.lockedMinutes ? 429 : 401).json({
+      error: r.lockedMinutes
+        ? `Đăng nhập sai quá nhiều lần. Thử lại sau ${r.lockedMinutes} phút.`
+        : `Sai tài khoản hoặc mật khẩu (còn ${r.remaining} lần thử)`,
+    });
     return;
   }
 
+  await recordSuccess(req);
   res.setHeader('Set-Cookie', createSessionCookie(username));
   res.status(200).json({ ok: true, username });
 };
