@@ -149,6 +149,23 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .spend-bar-col:hover .spend-bar,.spend-bar:focus{background:#ff7188;outline:none}
 .spend-label{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);margin-top:6px;white-space:nowrap}
 
+/* chi tiêu: quick chips, category */
+.quick-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.quick-chips:empty{display:none}
+.quick-chips button{background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);font-size:12px;padding:5px 11px;border-radius:20px;cursor:pointer;transition:.15s}
+.quick-chips button:hover{border-color:var(--mint);color:var(--text)}
+.field-row{display:flex;gap:10px}
+.field-row .field{flex:1;min-width:0}
+.cat-tag{font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:3px;background:var(--panel-2);color:var(--text-faint);white-space:nowrap}
+.cat-bars{margin-top:22px;display:flex;flex-direction:column;gap:12px}
+.cat-row{display:grid;grid-template-columns:150px 1fr auto;gap:12px;align-items:center;font-size:13px}
+.cat-row .cname{color:var(--text)}
+.cat-row .csub{font-size:10px;color:var(--text-faint);font-family:var(--font-mono);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-row .ctrack{height:8px;background:var(--panel-2);border-radius:4px;overflow:hidden}
+.cat-row .cfill{height:100%;background:var(--red);border-radius:4px}
+.cat-row .cval{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);text-align:right;white-space:nowrap}
+@media (max-width:560px){.cat-row{grid-template-columns:110px 1fr auto}}
+
 /* expense pie chart */
 .pie-wrap{display:flex;gap:28px;flex-wrap:wrap;align-items:center}
 .pie-chart-holder{position:relative;width:180px;height:180px;flex-shrink:0}
@@ -363,14 +380,25 @@ button{font-family:var(--font-body);cursor:pointer}
 
     <div class="section-label"><span class="idx">02</span><h2 id="dailyMonthTitle">Chi tiêu tháng</h2><div class="rule"></div></div>
     <div class="frame">
+      <div class="quick-chips" id="dailyChips"></div>
       <div class="field">
         <label>Nội dung</label>
-        <input type="text" id="dailyDesc" list="dailyDescList" placeholder="VD: Đi ăn, đi chơi, xem phim..." onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
+        <input type="text" id="dailyDesc" list="dailyDescList" placeholder="VD: Ăn, An vat, Grab..." oninput="updateCatHint()" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
         <datalist id="dailyDescList"></datalist>
       </div>
       <div class="field">
         <label>Số tiền (VNĐ)</label>
         <input type="number" id="dailyAmount" min="0" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Nhóm</label>
+          <select id="dailyCat"></select>
+        </div>
+        <div class="field" style="max-width:110px">
+          <label>Ngày</label>
+          <input type="number" id="dailyDay" min="1" max="31" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
+        </div>
       </div>
       <div class="err" id="dailyErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
       <div class="btn-row">
@@ -383,7 +411,28 @@ button{font-family:var(--font-body);cursor:pointer}
   </div>
 
   <div id="tabChart" class="tabpage" style="display:none">
-    <div class="section-label"><span class="idx">01</span><h2>Chi tiêu theo tháng</h2><div class="rule"></div></div>
+    <div class="year-nav" style="margin-bottom:14px">
+      <button class="btn small ghost" onclick="dashShiftDayMonth(-1)">‹</button>
+      <span id="dashDayMonthLabel"></span>
+      <button class="btn small ghost" onclick="dashShiftDayMonth(1)">›</button>
+    </div>
+    <div class="stats" id="dashKpis"></div>
+
+    <div class="section-label"><span class="idx">01</span><h2>Phân bổ theo nhóm · <span id="dashPieMonthLabel"></span></h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="pie-wrap">
+        <div class="pie-chart-holder" id="dashPieChart"></div>
+        <div class="pie-legend" id="dashPieLegend"></div>
+      </div>
+      <div class="cat-bars" id="dashCatBars"></div>
+    </div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="dashDayTitle">Chi tiêu theo ngày</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="spend-chart-scroll"><div class="spend-chart" id="dashDayChart"></div></div>
+    </div>
+
+    <div class="section-label"><span class="idx">03</span><h2>Chi tiêu theo tháng</h2><div class="rule"></div></div>
     <div class="frame">
       <div class="year-nav">
         <button class="btn small ghost" onclick="dashShiftYear(-1)">‹</button>
@@ -393,25 +442,7 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="spend-chart-scroll"><div class="spend-chart" id="dashMonthChart"></div></div>
     </div>
 
-    <div class="section-label"><span class="idx">02</span><h2 id="dashDayTitle">Chi tiêu theo ngày</h2><div class="rule"></div></div>
-    <div class="frame">
-      <div class="year-nav">
-        <button class="btn small ghost" onclick="dashShiftDayMonth(-1)">‹</button>
-        <span id="dashDayMonthLabel"></span>
-        <button class="btn small ghost" onclick="dashShiftDayMonth(1)">›</button>
-      </div>
-      <div class="spend-chart-scroll"><div class="spend-chart" id="dashDayChart"></div></div>
-    </div>
-
-    <div class="section-label"><span class="idx">03</span><h2>Phân bổ theo khoản chi · <span id="dashPieMonthLabel"></span></h2><div class="rule"></div></div>
-    <div class="frame">
-      <div class="pie-wrap">
-        <div class="pie-chart-holder" id="dashPieChart"></div>
-        <div class="pie-legend" id="dashPieLegend"></div>
-      </div>
-    </div>
-
-    <div class="section-label"><span class="idx">04</span><h2>Khoản chi lớn nhất</h2><div class="rule"></div></div>
+    <div class="section-label"><span class="idx">04</span><h2>Khoản chi lớn nhất trong tháng</h2><div class="rule"></div></div>
     <div class="frame" id="dashTopList"></div>
   </div>
 
@@ -1197,6 +1228,30 @@ function deleteExpenseBtn(){
 }
 
 /* ---- daily spending log (no account, just description + amount + date) ---- */
+// Order matters: first matching group wins (e.g. "Shopee Vip" is a subscription, not shopping).
+const CAT_RULES = [
+  ['App & subscription', ['chatgpt','netflix','apple music','youtube','spotify','tinder','skool','railway','shopee vip','premium','icloud','google one','claude']],
+  ['Hóa đơn & dịch vụ', ['nap dien thoai','tien dien','tien nuoc','tien mang','internet','chung cu','dich vu','wifi','gas']],
+  ['Ăn vặt & cafe', ['an vat','cafe','ca phe','tra sua','banh','nuoc ngot','kem']],
+  ['Mua sắm', ['shopping','shopee','nhu yeu pham','lazada','tiki','quan ao']],
+  ['Ăn uống', ['an','com','bun','pho','lau','nuong','an trua','an toi','an sang']],
+  ['Di chuyển', ['grab','xang','xe','taxi','gui xe','be']],
+  ['Giải trí', ['game','steam','cgv','phim','karaoke','du lich']],
+  ['Quà & hiếu hỉ', ['gift','qua','cuoi','mung','sinh nhat']],
+];
+const CATEGORIES = [...CAT_RULES.map(r => r[0]), 'Linh tinh'];
+function normVi(s){
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+}
+function guessCategory(desc){
+  const n = ' ' + normVi(desc || '').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  for(const [cat, kws] of CAT_RULES){
+    if(kws.some(k => n.includes(' ' + k + ' '))) return cat;
+  }
+  return 'Linh tinh';
+}
+function categoryOf(e){ return e.category || guessCategory(e.desc); }
+
 function shortDate(iso){
   const [y, m, d] = iso.split('-');
   return `${d}/${m}`;
@@ -1214,12 +1269,44 @@ function selectMonth(monthKey){
   cancelDailyEdit();
   renderDaily();
 }
-function dateForSelectedMonth(){
+function prevMonthKey(key){
+  const [y, m] = key.split('-').map(Number);
+  return m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
+}
+// For the current month, average over days elapsed so far, not the whole month.
+function daysCounted(key){
+  const [y, m] = key.split('-').map(Number);
+  if(key === todayISO().slice(0,7)) return parseInt(todayISO().slice(8,10), 10);
+  return new Date(y, m, 0).getDate();
+}
+function defaultDayForSelectedMonth(){
   const [y, m] = selectedMonthKey.split('-').map(Number);
   const todayDay = parseInt(todayISO().slice(8, 10), 10);
+  return Math.min(todayDay, new Date(y, m, 0).getDate());
+}
+function dateForSelectedMonth(dayOverride){
+  const [y, m] = selectedMonthKey.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();
-  const day = Math.min(todayDay, lastDay);
+  const day = Math.min(Math.max(1, dayOverride || defaultDayForSelectedMonth()), lastDay);
   return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function updateCatHint(){
+  const sel = document.getElementById('dailyCat');
+  const guess = guessCategory(document.getElementById('dailyDesc').value);
+  sel.options[0].textContent = `Tự động (${guess})`;
+}
+function pickQuickDesc(desc){
+  document.getElementById('dailyDesc').value = desc;
+  updateCatHint();
+  document.getElementById('dailyAmount').focus();
+}
+function renderDailyChips(list){
+  const counts = {};
+  list.forEach(e => { counts[e.desc] = (counts[e.desc] || 0) + 1; });
+  const top = Object.entries(counts).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  document.getElementById('dailyChips').innerHTML = top.map(([d]) =>
+    `<button type="button" onclick="pickQuickDesc(this.dataset.d)" data-d="${d.replace(/"/g,'&quot;')}">${d}</button>`
+  ).join('');
 }
 
 function updateDescDatalist(datalistId, entries){
@@ -1235,10 +1322,17 @@ function updateDescDatalist(datalistId, entries){
 function renderDaily(){
   const list = state.dailyExpenses || [];
   updateDescDatalist('dailyDescList', list);
+  renderDailyChips(list);
+  const catSel = document.getElementById('dailyCat');
+  if(!catSel.options.length){
+    catSel.innerHTML = '<option value="">Tự động</option>' + CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
   const todayY = parseInt(todayISO().slice(0, 4), 10);
   const todayM = parseInt(todayISO().slice(5, 7), 10);
   if(dailyViewYear === null) dailyViewYear = todayY;
   if(selectedMonthKey === null) selectedMonthKey = todayISO().slice(0, 7);
+  const dayInput = document.getElementById('dailyDay');
+  if(!editingDailyId && !dayInput.value) dayInput.value = defaultDayForSelectedMonth();
 
   document.getElementById('dailyYearLabel').textContent = dailyViewYear;
 
@@ -1260,8 +1354,12 @@ function renderDaily(){
 
   const monthEntries = list.filter(e => e.date.slice(0,7) === selectedMonthKey);
   const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
+  const prevKey = prevMonthKey(selectedMonthKey);
+  const prevTotal = list.filter(e => e.date.slice(0,7) === prevKey).reduce((s,e) => s + e.amount, 0);
   document.getElementById('dailyStatGrid').innerHTML = `
     <div class="stat neg"><div class="lbl">Tổng chi tiêu tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(monthTotal)}</div></div>
+    <div class="stat warn"><div class="lbl">Trung bình / ngày</div><div class="val">${fmt(monthTotal / daysCounted(selectedMonthKey))}</div></div>
+    <div class="stat ${monthTotal > prevTotal ? 'neg' : 'pos'}"><div class="lbl">So với tháng trước</div><div class="val">${prevTotal ? (monthTotal >= prevTotal ? '+' : '') + Math.round((monthTotal - prevTotal) / prevTotal * 100) + '%' : '—'}</div></div>
   `;
 
   const sorted = [...monthEntries].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
@@ -1270,6 +1368,7 @@ function renderDaily(){
       <div class="tx-left">
         <span class="daily-date">${shortDate(e.date)}</span>
         <span>${e.desc}</span>
+        <span class="cat-tag">${categoryOf(e)}</span>
       </div>
       <div style="display:flex;align-items:center">
         <span class="tx-amt">${fmt(e.amount)}</span>
@@ -1289,17 +1388,24 @@ function submitDaily(){
     return;
   }
   errEl.style.display = 'none';
+  const category = document.getElementById('dailyCat').value || undefined;
+  const day = parseInt(document.getElementById('dailyDay').value, 10);
 
   if(editingDailyId){
     const e = state.dailyExpenses.find(x => x.id === editingDailyId);
     e.desc = desc;
     e.amount = amount;
+    e.category = category;
+    if(day) e.date = e.date.slice(0, 8) + String(Math.min(day, new Date(+e.date.slice(0,4), +e.date.slice(5,7), 0).getDate())).padStart(2, '0');
   } else {
-    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: dateForSelectedMonth()});
+    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: dateForSelectedMonth(day), category});
   }
   save();
+  const keepDay = editingDailyId ? null : document.getElementById('dailyDay').value;
   cancelDailyEdit();
+  if(keepDay) document.getElementById('dailyDay').value = keepDay; // batch-entering several items for the same day
   render();
+  document.getElementById('dailyDesc').focus();
 }
 function editDaily(id){
   const e = state.dailyExpenses.find(x => x.id === id);
@@ -1307,6 +1413,9 @@ function editDaily(id){
   editingDailyId = id;
   document.getElementById('dailyDesc').value = e.desc;
   document.getElementById('dailyAmount').value = e.amount;
+  document.getElementById('dailyCat').value = e.category || '';
+  document.getElementById('dailyDay').value = parseInt(e.date.slice(8, 10), 10);
+  updateCatHint();
   document.getElementById('dailyErr').style.display = 'none';
   document.getElementById('dailySubmitBtn').textContent = 'Lưu thay đổi';
   document.getElementById('dailyCancelBtn').style.display = 'inline-flex';
@@ -1315,6 +1424,9 @@ function cancelDailyEdit(){
   editingDailyId = null;
   document.getElementById('dailyDesc').value = '';
   document.getElementById('dailyAmount').value = '';
+  document.getElementById('dailyCat').value = '';
+  document.getElementById('dailyDay').value = selectedMonthKey ? defaultDayForSelectedMonth() : '';
+  if(document.getElementById('dailyCat').options.length) updateCatHint();
   document.getElementById('dailyErr').style.display = 'none';
   document.getElementById('dailySubmitBtn').textContent = '+ Thêm';
   document.getElementById('dailyCancelBtn').style.display = 'none';
@@ -1364,16 +1476,38 @@ function renderExpensePie(entries){
   const holder = document.getElementById('dashPieChart');
   const legendEl = document.getElementById('dashPieLegend');
 
+  const barsEl = document.getElementById('dashCatBars');
   const grouped = {};
-  entries.forEach(e => { grouped[e.desc] = (grouped[e.desc] || 0) + e.amount; });
-  let items = Object.entries(grouped).map(([desc, amount]) => ({desc, amount})).sort((a,b) => b.amount - a.amount);
+  entries.forEach(e => {
+    const c = categoryOf(e);
+    const g = grouped[c] || (grouped[c] = {amount: 0, count: 0, descs: {}});
+    g.amount += e.amount;
+    g.count += 1;
+    g.descs[e.desc] = (g.descs[e.desc] || 0) + e.amount;
+  });
+  const all = Object.entries(grouped).map(([desc, g]) => ({desc, ...g})).sort((a,b) => b.amount - a.amount);
+  let items = all.map(g => ({desc: g.desc, amount: g.amount}));
   const total = items.reduce((s,i) => s + i.amount, 0);
 
   if(!items.length || total === 0){
     holder.innerHTML = '<div class="empty">Chưa có chi tiêu nào trong tháng này</div>';
     legendEl.innerHTML = '';
+    barsEl.innerHTML = '';
     return;
   }
+
+  // Full ranking of every group — the donut only has room for the top 3.
+  const maxG = all[0].amount;
+  barsEl.innerHTML = all.map(g => {
+    const pct = Math.round(g.amount / total * 100);
+    const topDescs = Object.entries(g.descs).sort((a,b) => b[1] - a[1]).slice(0, 3).map(([d]) => d).join(', ');
+    return `
+    <div class="cat-row" title="${g.desc}: ${fmt(g.amount)} · ${g.count} khoản">
+      <div><div class="cname">${g.desc}</div><div class="csub">${g.count} khoản · ${topDescs}</div></div>
+      <div class="ctrack"><div class="cfill" style="width:${Math.max(2, g.amount / maxG * 100)}%"></div></div>
+      <div class="cval">${fmt(g.amount)} <span class="pie-legend-pct">${pct}%</span></div>
+    </div>`;
+  }).join('');
 
   const MAX_SLICES = 3; // beyond this, color alone stops being reliably distinguishable — fold the tail into "Khác"
   if(items.length > MAX_SLICES){
@@ -1439,15 +1573,28 @@ function renderDash(){
   });
   renderSpendBars('dashDayChart', dayBars);
 
+  const monthEntries = list.filter(e => e.date.slice(0,7) === dashDayMonth);
   document.getElementById('dashPieMonthLabel').textContent = `Tháng ${dm}/${dy}`;
-  renderExpensePie(list.filter(e => e.date.slice(0,7) === dashDayMonth));
+  renderExpensePie(monthEntries);
 
-  const top = [...list].sort((a,b) => b.amount - a.amount).slice(0, 8);
+  const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
+  const prevTotal = list.filter(e => e.date.slice(0,7) === prevMonthKey(dashDayMonth)).reduce((s,e) => s + e.amount, 0);
+  const fixedLike = monthEntries.filter(e => ['App & subscription','Hóa đơn & dịch vụ'].includes(categoryOf(e))).reduce((s,e) => s + e.amount, 0);
+  const delta = prevTotal ? Math.round((monthTotal - prevTotal) / prevTotal * 100) : null;
+  document.getElementById('dashKpis').innerHTML = `
+    <div class="stat neg"><div class="lbl">Tổng chi tháng ${dm}/${dy}</div><div class="val">${fmt(monthTotal)}</div></div>
+    <div class="stat warn"><div class="lbl">Trung bình / ngày</div><div class="val">${fmt(monthTotal / daysCounted(dashDayMonth))}</div></div>
+    <div class="stat ${delta !== null && delta > 0 ? 'neg' : 'pos'}"><div class="lbl">So với tháng trước</div><div class="val">${delta === null ? '—' : (delta >= 0 ? '+' : '') + delta + '%'}</div></div>
+    <div class="stat"><div class="lbl">Hóa đơn + app định kỳ</div><div class="val">${fmt(fixedLike)}</div></div>
+  `;
+
+  const top = [...monthEntries].sort((a,b) => b.amount - a.amount).slice(0, 8);
   document.getElementById('dashTopList').innerHTML = top.map(e => `
     <div class="tx-item">
       <div class="tx-left">
         <span class="daily-date">${shortDate(e.date)}</span>
         <span>${e.desc}</span>
+        <span class="cat-tag">${categoryOf(e)}</span>
       </div>
       <span class="tx-amt">${fmt(e.amount)}</span>
     </div>
