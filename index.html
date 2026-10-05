@@ -2,7 +2,14 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#070a10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Credyra">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
 <title>Credyra · Quản lý tài chính cá nhân</title>
 <link rel="icon" href="Credyra.ico" type="image/x-icon">
 <link rel="shortcut icon" href="Credyra.ico" type="image/x-icon">
@@ -156,7 +163,7 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .quick-chips button:hover{border-color:var(--mint);color:var(--text)}
 .field-row{display:flex;gap:10px}
 .field-row .field{flex:1;min-width:0}
-.fixed-toggle{display:flex;align-items:center;gap:7px;height:38px;font-size:13px;color:var(--text);cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font-body)}
+.field .fixed-toggle{white-space:nowrap;display:flex;align-items:center;gap:7px;height:38px;font-size:13px;color:var(--text);cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font-body)}
 .fixed-toggle input{width:16px;height:16px;accent-color:var(--amber)}
 .cat-tag.fixed{background:var(--amber-dim);color:var(--amber)}
 .imp-row{display:grid;grid-template-columns:22px 1fr 130px 64px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
@@ -308,6 +315,75 @@ button{font-family:var(--font-body);cursor:pointer}
 .save-status.saving{color:var(--text-faint)}
 .save-status.ok{color:var(--mint)}
 .save-status.err{color:var(--red)}
+/* ---------- phone layout ---------- */
+@media (max-width: 640px){
+  body{padding:14px 12px calc(96px + env(safe-area-inset-bottom))}
+  header{margin-bottom:14px;gap:10px}
+  .brand p{display:none}
+  .brand h1{font-size:17px}
+  .clock{display:none}
+  header .btn.small{padding:6px 10px;font-size:11px}
+
+  /* tabs: one swipeable row, pinned to the top while scrolling */
+  .navtabs{position:sticky;top:0;z-index:15;background:var(--bg);margin:0 -12px 16px;padding:0 12px;
+    overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .navtabs::-webkit-scrollbar{display:none}
+  .navtab{white-space:nowrap;flex-shrink:0;font-size:12px;padding:12px 8px}
+
+  .section-label{margin:24px 0 10px;flex-wrap:wrap;row-gap:6px}
+  .section-label h2{font-size:12px;letter-spacing:1px}
+  .section-label .btn.small{padding:5px 10px;font-size:11px}
+  .frame{padding:12px}
+
+  /* stat tiles two per row */
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat{padding:12px}
+  .stats > .stat:last-child:nth-child(odd){grid-column:1/-1}
+  .stat .lbl{font-size:9px;letter-spacing:.6px;margin-bottom:5px}
+  .stat .val{font-size:16px;letter-spacing:-.3px;overflow-wrap:anywhere}
+
+  /* lists: text wraps instead of pushing the amount / delete button off-screen */
+  .tx-item{align-items:flex-start;gap:8px}
+  .tx-left{flex:1;min-width:0;flex-wrap:wrap;gap:3px 8px}
+  .tx-left > span:not(.tx-tag):not(.cat-tag):not(.daily-date){overflow-wrap:anywhere}
+  .tx-item > div:last-child{flex-shrink:0}
+  .tx-amt{font-size:12px}
+  .tx-edit,.tx-del{margin-left:2px;padding:2px 6px;font-size:16px}
+
+  /* loans: card per loan with labelled stats underneath */
+  .loan-row.head{display:none}
+  .loan-row{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;padding:12px 2px}
+  .loan-row .loan-name{grid-column:1/-1}
+  .loan-row > [data-label]{font-size:12px}
+  .loan-row > [data-label]::before{content:attr(data-label);display:block;font-size:9px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
+
+  .credit-grid{grid-template-columns:1fr}
+  .wallet-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .wallet-card .bal{font-size:16px}
+
+  .month-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .month-tile{padding:9px 8px}
+  .month-tile .mname{font-size:12px;margin-bottom:3px}
+  .month-tile .mtotal{font-size:10px}
+
+  .pie-wrap{justify-content:center;gap:18px}
+  .cat-row{grid-template-columns:minmax(0,1fr) 70px auto;gap:8px}
+  .cat-detail{margin-left:8px}
+
+  /* modals become bottom sheets */
+  .overlay{padding:0;align-items:flex-end}
+  .modal{max-width:none !important;border-radius:14px 14px 0 0;max-height:92vh;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+  .imp-row{grid-template-columns:22px minmax(0,1fr) 96px 48px;gap:8px}
+  .modal .modal-actions{position:sticky;bottom:calc(-20px - env(safe-area-inset-bottom));background:var(--panel);
+    margin:12px -16px calc(-20px - env(safe-area-inset-bottom));padding:12px 16px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+
+  /* 16px inputs stop iOS from zooming the page on focus */
+  .field input,.field select,.imp-row input[type=number]{font-size:16px}
+  .field-row{flex-wrap:wrap}
+  .field-row .field{min-width:90px}
+
+  .fab{width:52px;height:52px;bottom:calc(18px + env(safe-area-inset-bottom));right:16px}
+}
 </style>
 </head>
 <body>
@@ -425,7 +501,7 @@ button{font-family:var(--font-body);cursor:pointer}
           <label>Ngày</label>
           <input type="number" id="dailyDay" min="1" max="31" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
         </div>
-        <div class="field" style="max-width:110px">
+        <div class="field" style="flex:0 0 auto">
           <label>Loại</label>
           <label class="fixed-toggle"><input type="checkbox" id="dailyFixed" onchange="dailyFixedTouched=true"> Cố định</label>
         </div>
@@ -1058,9 +1134,9 @@ function renderLoans(){
     return `
     <div class="loan-row" onclick="openAccountModal('loan','${a.id}')">
       <div class="loan-name">${a.name}<div class="loan-progress"><div style="width:${pct}%"></div></div></div>
-      <div class="mono">${a.paidTerms}/${a.totalTerms} kỳ</div>
-      <div class="mono">${dueLabel}</div>
-      <div class="mono">${fmt(a.rate)}</div>
+      <div class="mono" data-label="Tiến độ">${a.paidTerms}/${a.totalTerms} kỳ</div>
+      <div class="mono" data-label="Kỳ tới">${dueLabel}</div>
+      <div class="mono" data-label="Mỗi kỳ">${fmt(a.rate)}</div>
     </div>`;
   }).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
 }
@@ -2162,6 +2238,16 @@ function deleteAccountBtn(){
 document.querySelectorAll('.overlay').forEach(ov=>{
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
 });
+
+// Phones: show the digit keypad for every number field, including ones rendered later.
+function setNumericKeypad(root){
+  const sel = 'input[type=number]:not([inputmode])';
+  if(root.matches && root.matches(sel)) root.setAttribute('inputmode', 'numeric');
+  root.querySelectorAll(sel).forEach(i => i.setAttribute('inputmode', 'numeric'));
+}
+setNumericKeypad(document);
+new MutationObserver(muts => muts.forEach(m => m.addedNodes.forEach(n => n.nodeType === 1 && setNumericKeypad(n))))
+  .observe(document.body, {childList: true, subtree: true});
 
 document.addEventListener('wheel', e=>{
   if(document.activeElement && document.activeElement.type === 'number') document.activeElement.blur();
