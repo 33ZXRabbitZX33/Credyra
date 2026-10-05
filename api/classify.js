@@ -3,7 +3,7 @@ const { verifySession } = require('./_auth');
 
 // Must stay in sync with CATEGORIES in index.html.
 const CATEGORIES = ['App & subscription', 'Hóa đơn & dịch vụ', 'Ăn vặt & cafe', 'Mua sắm', 'Ăn uống',
-  'Di chuyển', 'Giải trí', 'Quà & hiếu hỉ', 'Linh tinh'];
+  'Di chuyển', 'Giải trí', 'Quà & hiếu hỉ', 'Sức khỏe & cá nhân', 'Linh tinh'];
 
 module.exports = async (req, res) => {
   if (!verifySession(req)) {

@@ -727,7 +727,9 @@ function seed(){
     expenses: [],
     dailyExpenses: [],
     youtube: [],
-    dropship: []
+    dropship: [],
+    catMemory: {},
+    aiCats: {}
   };
 }
 function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return localDateStr(d)}
@@ -769,6 +771,8 @@ async function loadStateFromServer(){
   if(!state.dailyExpenses) state.dailyExpenses = [];
   if(!state.youtube) state.youtube = [];
   if(!state.dropship) state.dropship = [];
+  if(!state.catMemory) state.catMemory = {};
+  if(!state.aiCats) state.aiCats = {};
   return true;
 }
 
@@ -776,6 +780,7 @@ function showApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.querySelector('.wrap').style.display = '';
   render();
+  classifyUnknownWithAI();
 }
 
 function showLoginForm(err){
@@ -1280,6 +1285,7 @@ const CAT_RULES = [
   ['Di chuyển', ['grab','xang','xe','taxi','gui xe','be']],
   ['Giải trí', ['game','steam','cgv','phim','karaoke','du lich']],
   ['Quà & hiếu hỉ', ['gift','qua','cuoi','mung','sinh nhat']],
+  ['Sức khỏe & cá nhân', ['thuoc','kham','tiem','nha khoa','benh vien','cut toc','cat toc','toc','gym','spa']],
 ];
 const CATEGORIES = [...CAT_RULES.map(r => r[0]), 'Linh tinh'];
 function normVi(s){
@@ -1292,7 +1298,50 @@ function guessCategory(desc){
   }
   return 'Linh tinh';
 }
-function categoryOf(e){ return e.category || guessCategory(e.desc); }
+// Resolution order: what the user taught for this description > keyword rules > cached AI answer.
+function descKey(desc){ return normVi(desc || '').replace(/\s+/g, ' ').trim(); }
+function resolveCategory(desc){
+  const k = descKey(desc);
+  const learned = state && state.catMemory && state.catMemory[k];
+  if(learned) return {cat: learned, source: 'learned'};
+  const rule = guessCategory(desc);
+  if(rule !== 'Linh tinh') return {cat: rule, source: 'rule'};
+  const ai = state && state.aiCats && state.aiCats[k];
+  if(ai) return {cat: ai, source: 'ai'};
+  return {cat: 'Linh tinh', source: 'none'};
+}
+function categoryOf(e){ return e.category || resolveCategory(e.desc).cat; }
+
+// Ask the AI only for descriptions nothing else could classify; one call per unique
+// description ever (answer cached in state.aiCats, including "Linh tinh").
+const aiPending = new Set();
+const aiFailed = new Set();
+async function classifyUnknownWithAI(){
+  const toAsk = new Map(); // normalized key -> one original description to send
+  (state.dailyExpenses || []).forEach(e => {
+    if(e.category) return;
+    const k = descKey(e.desc);
+    if(!k || k === 'linh tinh' || k === 'khac' || aiPending.has(k) || aiFailed.has(k) || toAsk.has(k)) return;
+    if(resolveCategory(e.desc).source === 'none') toAsk.set(k, e.desc);
+  });
+  for(const [k, desc] of toAsk){
+    aiPending.add(k);
+    try{
+      const resp = await fetch('/api/classify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({desc})});
+      if(!resp.ok) throw new Error('classify ' + resp.status);
+      const {category} = await resp.json();
+      if(!state.aiCats) state.aiCats = {};
+      state.aiCats[k] = CATEGORIES.includes(category) ? category : 'Linh tinh';
+      save();
+      render();
+    } catch(err){
+      console.warn('AI classify failed for', desc, err);
+      aiFailed.add(k);
+    } finally {
+      aiPending.delete(k);
+    }
+  }
+}
 
 function shortDate(iso){
   const [y, m, d] = iso.split('-');
@@ -1353,7 +1402,9 @@ let dailyFixedTouched = false; // once the user flips the checkbox, stop auto-ti
 function updateCatHint(){
   const sel = document.getElementById('dailyCat');
   const desc = document.getElementById('dailyDesc').value;
-  sel.options[0].textContent = `Tự động (${guessCategory(desc)})`;
+  const r = resolveCategory(desc);
+  const srcLabel = {learned: ' · đã học', ai: ' · AI', none: desc.trim() ? ' · sẽ hỏi AI' : ''}[r.source] || '';
+  sel.options[0].textContent = `Tự động (${r.cat}${srcLabel})`;
   const tpl = matchTemplate(desc);
   if(!dailyFixedTouched) document.getElementById('dailyFixed').checked = !!tpl;
   const hint = document.getElementById('dailyFixedHint');
@@ -1508,6 +1559,11 @@ function submitDaily(){
   }
   errEl.style.display = 'none';
   const category = document.getElementById('dailyCat').value || undefined;
+  if(category){
+    // remember the user's choice so the same description is auto-categorized next time
+    if(!state.catMemory) state.catMemory = {};
+    state.catMemory[descKey(desc)] = category;
+  }
   const day = parseInt(document.getElementById('dailyDay').value, 10);
   const fixed = document.getElementById('dailyFixed').checked || undefined;
   const tpl = fixed ? matchTemplate(desc) : null;
@@ -1530,6 +1586,7 @@ function submitDaily(){
   if(keepDay) document.getElementById('dailyDay').value = keepDay; // batch-entering several items for the same day
   render();
   document.getElementById('dailyDesc').focus();
+  classifyUnknownWithAI();
 }
 function editDaily(id){
   const e = state.dailyExpenses.find(x => x.id === id);
