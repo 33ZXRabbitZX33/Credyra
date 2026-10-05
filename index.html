@@ -156,6 +156,16 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 .quick-chips button:hover{border-color:var(--mint);color:var(--text)}
 .field-row{display:flex;gap:10px}
 .field-row .field{flex:1;min-width:0}
+.fixed-toggle{display:flex;align-items:center;gap:7px;height:38px;font-size:13px;color:var(--text);cursor:pointer;text-transform:none;letter-spacing:0;font-family:var(--font-body)}
+.fixed-toggle input{width:16px;height:16px;accent-color:var(--amber)}
+.cat-tag.fixed{background:var(--amber-dim);color:var(--amber)}
+.imp-row{display:grid;grid-template-columns:22px 1fr 130px 64px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.imp-row:last-child{border-bottom:none}
+.imp-row input[type=number]{background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:6px 8px;border-radius:3px;font-family:var(--font-mono);font-size:12px;width:100%}
+.imp-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--mint)}
+.imp-row .imp-name{min-width:0}
+.imp-row .imp-sub{font-size:10px;color:var(--text-faint);font-family:var(--font-mono)}
+.imp-row.done{opacity:.5}
 .cat-tag{font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:3px;background:var(--panel-2);color:var(--text-faint);white-space:nowrap}
 .cat-bars{margin-top:22px;display:flex;flex-direction:column;gap:12px}
 .cat-row{display:grid;grid-template-columns:150px 1fr auto;gap:12px;align-items:center;font-size:13px}
@@ -361,7 +371,8 @@ button{font-family:var(--font-body);cursor:pointer}
   <div id="tabExpenses" class="tabpage" style="display:none">
     <div class="stats" id="expenseStatGrid"></div>
 
-    <div class="section-label"><span class="idx">01</span><h2>Chi phí cố định hàng tháng</h2><div class="rule"></div><button class="btn small ghost" onclick="openExpenseModal()">+ Thêm chi phí</button></div>
+    <div class="section-label"><span class="idx">01</span><h2>Mẫu chi phí cố định</h2><div class="rule"></div><button class="btn small ghost" onclick="openExpenseModal()">+ Thêm mẫu</button></div>
+    <div class="field-hint" style="margin:-4px 0 12px">Đây là danh sách mẫu. Mỗi tháng vào tab Chi tiêu → "Nhập chi phí cố định" để đưa các khoản đến hạn vào chi tiêu tháng đó.</div>
     <div class="frame" id="expenseList"></div>
   </div>
 
@@ -378,7 +389,7 @@ button{font-family:var(--font-body);cursor:pointer}
 
     <div class="stats" id="dailyStatGrid" style="margin-top:14px"></div>
 
-    <div class="section-label"><span class="idx">02</span><h2 id="dailyMonthTitle">Chi tiêu tháng</h2><div class="rule"></div></div>
+    <div class="section-label"><span class="idx">02</span><h2 id="dailyMonthTitle">Chi tiêu tháng</h2><div class="rule"></div><button class="btn small ghost" id="importFixedBtn" onclick="openImportModal()">⇩ Nhập chi phí cố định</button></div>
     <div class="frame">
       <div class="quick-chips" id="dailyChips"></div>
       <div class="field">
@@ -399,6 +410,10 @@ button{font-family:var(--font-body);cursor:pointer}
         <div class="field" style="max-width:110px">
           <label>Ngày</label>
           <input type="number" id="dailyDay" min="1" max="31" onkeydown="if(event.key==='Enter'){event.preventDefault();submitDaily();}">
+        </div>
+        <div class="field" style="max-width:110px">
+          <label>Loại</label>
+          <label class="fixed-toggle"><input type="checkbox" id="dailyFixed" onchange="dailyFixedTouched=true"> Cố định</label>
         </div>
       </div>
       <div class="err" id="dailyErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
@@ -597,6 +612,18 @@ button{font-family:var(--font-body);cursor:pointer}
       <button class="btn danger" id="accDeleteBtn" onclick="deleteAccountBtn()" style="display:none;margin-right:auto">Xóa</button>
       <button class="btn ghost" onclick="closeAccountModal()">Hủy</button>
       <button class="btn primary" onclick="submitAccount()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="importOverlay">
+  <div class="modal" style="max-width:560px">
+    <h3 id="importTitle">Nhập chi phí cố định</h3>
+    <div class="field-hint" style="margin:0 0 12px">Chọn các khoản muốn đưa vào tháng này. Sửa số tiền nếu tháng này khác mẫu (VD tiền điện).</div>
+    <div id="importRows"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeImportModal()">Hủy</button>
+      <button class="btn primary" id="importConfirmBtn" onclick="confirmImport()">Nhập</button>
     </div>
   </div>
 </div>
@@ -1291,15 +1318,79 @@ function dateForSelectedMonth(dayOverride){
   const day = Math.min(Math.max(1, dayOverride || defaultDayForSelectedMonth()), lastDay);
   return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 }
+/* ---- fixed-cost templates -> Chi tiêu ---- */
+function matchTemplate(desc){
+  const key = normVi(desc || '').trim();
+  return key ? (state.expenses || []).find(x => normVi(x.name).trim() === key) : null;
+}
+function importedThisMonth(tplId, monthKey, exceptId){
+  return (state.dailyExpenses || []).find(e => e.fixedId === tplId && e.date.slice(0,7) === monthKey && e.id !== exceptId);
+}
+function templateDueInMonth(tpl, monthKey){
+  const cycle = tpl.cycleMonths || 1;
+  if(cycle === 1) return true;
+  const [ay, am] = tpl.anchorDate.split('-').map(Number);
+  const [y, m] = monthKey.split('-').map(Number);
+  const diff = (y - ay) * 12 + (m - am);
+  return ((diff % cycle) + cycle) % cycle === 0;
+}
+
+let dailyFixedTouched = false; // once the user flips the checkbox, stop auto-ticking it
 function updateCatHint(){
   const sel = document.getElementById('dailyCat');
   const desc = document.getElementById('dailyDesc').value;
   sel.options[0].textContent = `Tự động (${guessCategory(desc)})`;
-  const key = normVi(desc).trim();
-  const fixed = key && (state.expenses || []).find(x => normVi(x.name).trim() === key);
+  const tpl = matchTemplate(desc);
+  if(!dailyFixedTouched) document.getElementById('dailyFixed').checked = !!tpl;
   const hint = document.getElementById('dailyFixedHint');
-  hint.style.display = fixed ? 'block' : 'none';
-  if(fixed) hint.textContent = `"${fixed.name}" đã có trong Chi phí cố định (${fmt(fixed.amount)}) — không cần ghi lại ở đây.`;
+  const dup = tpl && importedThisMonth(tpl.id, selectedMonthKey, editingDailyId);
+  hint.style.display = tpl ? 'block' : 'none';
+  if(dup) hint.textContent = `⚠ "${tpl.name}" đã nhập tháng này (${fmt(dup.amount)}, ngày ${shortDate(dup.date)}) — thêm nữa sẽ bị trùng.`;
+  else if(tpl) hint.textContent = `Khớp mẫu cố định "${tpl.name}" (${fmt(tpl.amount)}) — sẽ tính là chi phí cố định.`;
+}
+
+let importCandidates = [];
+function openImportModal(){
+  const [y, m] = selectedMonthKey.split('-').map(Number);
+  document.getElementById('importTitle').textContent = `Nhập chi phí cố định · Tháng ${m}/${y}`;
+  const lastDay = new Date(y, m, 0).getDate();
+  importCandidates = (state.expenses || []).filter(t => templateDueInMonth(t, selectedMonthKey)).map(t => ({
+    tpl: t,
+    done: importedThisMonth(t.id, selectedMonthKey),
+    day: Math.min(parseInt(t.anchorDate.slice(8, 10), 10) || 1, lastDay),
+  }));
+  const rows = document.getElementById('importRows');
+  rows.innerHTML = importCandidates.map((c, i) => `
+    <div class="imp-row${c.done ? ' done' : ''}">
+      <input type="checkbox" id="imp_chk_${i}" ${c.done ? 'disabled' : 'checked'} onchange="updateImportBtn()">
+      <div class="imp-name">${c.tpl.name}<div class="imp-sub">${c.done ? `Đã nhập ${shortDate(c.done.date)} · ${fmt(c.done.amount)}` : cycleLabel(c.tpl.cycleMonths || 1)}</div></div>
+      <input type="number" id="imp_amt_${i}" value="${c.tpl.amount}" min="0" ${c.done ? 'disabled' : ''}>
+      <input type="number" id="imp_day_${i}" value="${c.day}" min="1" max="${lastDay}" title="Ngày" ${c.done ? 'disabled' : ''}>
+    </div>`).join('') || '<div class="empty">Không có mẫu nào đến hạn trong tháng này. Thêm mẫu ở tab Chi phí cố định.</div>';
+  updateImportBtn();
+  document.getElementById('importOverlay').classList.add('open');
+}
+function updateImportBtn(){
+  const n = importCandidates.filter((c, i) => !c.done && document.getElementById(`imp_chk_${i}`).checked).length;
+  const btn = document.getElementById('importConfirmBtn');
+  btn.textContent = n ? `Nhập ${n} khoản` : 'Nhập';
+  btn.disabled = !n;
+}
+function closeImportModal(){ document.getElementById('importOverlay').classList.remove('open'); }
+function confirmImport(){
+  const [y, m] = selectedMonthKey.split('-');
+  const lastDay = new Date(+y, +m, 0).getDate();
+  let t = Date.now();
+  importCandidates.forEach((c, i) => {
+    if(c.done || !document.getElementById(`imp_chk_${i}`).checked) return;
+    const amount = parseFloat(document.getElementById(`imp_amt_${i}`).value);
+    if(!amount || amount <= 0) return;
+    const day = Math.min(Math.max(1, parseInt(document.getElementById(`imp_day_${i}`).value, 10) || c.day), lastDay);
+    state.dailyExpenses.push({ id: 'd' + (t++), desc: c.tpl.name, amount, date: `${y}-${m}-${String(day).padStart(2,'0')}`, fixed: true, fixedId: c.tpl.id });
+  });
+  save();
+  closeImportModal();
+  render();
 }
 function pickQuickDesc(desc){
   document.getElementById('dailyDesc').value = desc;
@@ -1360,11 +1451,18 @@ function renderDaily(){
 
   const monthEntries = list.filter(e => e.date.slice(0,7) === selectedMonthKey);
   const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
+  const fixedTotal = monthEntries.filter(e => e.fixed).reduce((s,e) => s + e.amount, 0);
+  const flexTotal = monthTotal - fixedTotal;
   const prevKey = prevMonthKey(selectedMonthKey);
   const prevTotal = list.filter(e => e.date.slice(0,7) === prevKey).reduce((s,e) => s + e.amount, 0);
+  const dueTpls = (state.expenses || []).filter(t => templateDueInMonth(t, selectedMonthKey));
+  const doneTpls = dueTpls.filter(t => importedThisMonth(t.id, selectedMonthKey)).length;
+  document.getElementById('importFixedBtn').textContent = `⇩ Nhập chi phí cố định (${doneTpls}/${dueTpls.length})`;
   document.getElementById('dailyStatGrid').innerHTML = `
-    <div class="stat neg"><div class="lbl">Tổng chi tiêu tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(monthTotal)}</div></div>
-    <div class="stat warn"><div class="lbl">Trung bình / ngày</div><div class="val">${fmt(monthTotal / daysCounted(selectedMonthKey))}</div></div>
+    <div class="stat neg"><div class="lbl">Tổng chi tháng ${parseInt(sm,10)}/${sy}</div><div class="val">${fmt(monthTotal)}</div></div>
+    <div class="stat"><div class="lbl">Linh động</div><div class="val">${fmt(flexTotal)}</div></div>
+    <div class="stat warn"><div class="lbl">Cố định · ${doneTpls}/${dueTpls.length} mẫu đã nhập</div><div class="val">${fmt(fixedTotal)}</div></div>
+    <div class="stat"><div class="lbl">Linh động TB / ngày</div><div class="val">${fmt(flexTotal / daysCounted(selectedMonthKey))}</div></div>
     <div class="stat ${monthTotal > prevTotal ? 'neg' : 'pos'}"><div class="lbl">So với tháng trước</div><div class="val">${prevTotal ? (monthTotal >= prevTotal ? '+' : '') + Math.round((monthTotal - prevTotal) / prevTotal * 100) + '%' : '—'}</div></div>
   `;
 
@@ -1374,6 +1472,7 @@ function renderDaily(){
       <div class="tx-left">
         <span class="daily-date">${shortDate(e.date)}</span>
         <span>${e.desc}</span>
+        ${e.fixed ? '<span class="cat-tag fixed">Cố định</span>' : ''}
         <span class="cat-tag">${categoryOf(e)}</span>
       </div>
       <div style="display:flex;align-items:center">
@@ -1396,15 +1495,20 @@ function submitDaily(){
   errEl.style.display = 'none';
   const category = document.getElementById('dailyCat').value || undefined;
   const day = parseInt(document.getElementById('dailyDay').value, 10);
+  const fixed = document.getElementById('dailyFixed').checked || undefined;
+  const tpl = fixed ? matchTemplate(desc) : null;
+  const fixedId = tpl ? tpl.id : undefined;
 
   if(editingDailyId){
     const e = state.dailyExpenses.find(x => x.id === editingDailyId);
     e.desc = desc;
     e.amount = amount;
     e.category = category;
+    e.fixed = fixed;
+    e.fixedId = fixedId;
     if(day) e.date = e.date.slice(0, 8) + String(Math.min(day, new Date(+e.date.slice(0,4), +e.date.slice(5,7), 0).getDate())).padStart(2, '0');
   } else {
-    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: dateForSelectedMonth(day), category});
+    state.dailyExpenses.push({id: 'd' + Date.now(), desc, amount, date: dateForSelectedMonth(day), category, fixed, fixedId});
   }
   save();
   const keepDay = editingDailyId ? null : document.getElementById('dailyDay').value;
@@ -1421,6 +1525,8 @@ function editDaily(id){
   document.getElementById('dailyAmount').value = e.amount;
   document.getElementById('dailyCat').value = e.category || '';
   document.getElementById('dailyDay').value = parseInt(e.date.slice(8, 10), 10);
+  document.getElementById('dailyFixed').checked = !!e.fixed;
+  dailyFixedTouched = true; // respect the saved value instead of re-guessing
   updateCatHint();
   document.getElementById('dailyErr').style.display = 'none';
   document.getElementById('dailySubmitBtn').textContent = 'Lưu thay đổi';
@@ -1431,6 +1537,8 @@ function cancelDailyEdit(){
   document.getElementById('dailyDesc').value = '';
   document.getElementById('dailyAmount').value = '';
   document.getElementById('dailyCat').value = '';
+  document.getElementById('dailyFixed').checked = false;
+  dailyFixedTouched = false;
   document.getElementById('dailyDay').value = selectedMonthKey ? defaultDayForSelectedMonth() : '';
   if(document.getElementById('dailyCat').options.length) updateCatHint();
   document.getElementById('dailyErr').style.display = 'none';
@@ -1569,12 +1677,13 @@ function renderDash(){
   if(dashDayMonth === null) dashDayMonth = todayISO().slice(0, 7);
   const [dy, dm] = dashDayMonth.split('-').map(Number);
   document.getElementById('dashDayMonthLabel').textContent = `Tháng ${dm}/${dy}`;
-  document.getElementById('dashDayTitle').textContent = `Chi tiêu theo ngày · Tháng ${dm}/${dy}`;
+  document.getElementById('dashDayTitle').textContent = `Chi tiêu linh động theo ngày · Tháng ${dm}/${dy}`;
   const daysInMonth = new Date(dy, dm, 0).getDate();
   const dayBars = Array.from({length: daysInMonth}, (_, idx) => {
     const day = idx + 1;
     const dateKey = `${dy}-${String(dm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const amount = list.filter(e => e.date === dateKey).reduce((s,e) => s + e.amount, 0);
+    // fixed bills would dwarf everyday spending, so the per-day view shows flexible only
+    const amount = list.filter(e => e.date === dateKey && !e.fixed).reduce((s,e) => s + e.amount, 0);
     return { label: String(day), amount };
   });
   renderSpendBars('dashDayChart', dayBars);
@@ -1585,13 +1694,15 @@ function renderDash(){
 
   const monthTotal = monthEntries.reduce((s,e) => s + e.amount, 0);
   const prevTotal = list.filter(e => e.date.slice(0,7) === prevMonthKey(dashDayMonth)).reduce((s,e) => s + e.amount, 0);
-  const fixedMonthly = (state.expenses || []).reduce((s,x) => s + x.amount / (x.cycleMonths || 1), 0);
+  const fixedTotal = monthEntries.filter(e => e.fixed).reduce((s,e) => s + e.amount, 0);
+  const flexTotal = monthTotal - fixedTotal;
   const delta = prevTotal ? Math.round((monthTotal - prevTotal) / prevTotal * 100) : null;
   document.getElementById('dashKpis').innerHTML = `
     <div class="stat neg"><div class="lbl">Tổng chi tháng ${dm}/${dy}</div><div class="val">${fmt(monthTotal)}</div></div>
-    <div class="stat warn"><div class="lbl">Trung bình / ngày</div><div class="val">${fmt(monthTotal / daysCounted(dashDayMonth))}</div></div>
+    <div class="stat"><div class="lbl">Linh động</div><div class="val">${fmt(flexTotal)}</div></div>
+    <div class="stat warn"><div class="lbl">Cố định</div><div class="val">${fmt(fixedTotal)}</div></div>
+    <div class="stat"><div class="lbl">Linh động TB / ngày</div><div class="val">${fmt(flexTotal / daysCounted(dashDayMonth))}</div></div>
     <div class="stat ${delta !== null && delta > 0 ? 'neg' : 'pos'}"><div class="lbl">So với tháng trước</div><div class="val">${delta === null ? '—' : (delta >= 0 ? '+' : '') + delta + '%'}</div></div>
-    <div class="stat"><div class="lbl">+ Chi phí cố định / tháng</div><div class="val">${fmt(fixedMonthly)}</div></div>
   `;
 
   const top = [...monthEntries].sort((a,b) => b.amount - a.amount).slice(0, 8);
