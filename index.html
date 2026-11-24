@@ -114,7 +114,7 @@ header{display:flex;justify-content:space-between;align-items:flex-end;margin-bo
 /* loan table */
 .loan-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);align-items:center;font-size:13px}
 .loan-row:last-child{border-bottom:none}
-.loan-row.cost{grid-template-columns:1.4fr repeat(5,1fr)}
+.loan-row.cost{grid-template-columns:1.4fr repeat(6,1fr)}
 .loan-row.head{color:var(--text-faint);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:1px}
 .loan-name{font-family:var(--font-display);letter-spacing:.3px}
 .loan-progress{height:4px;background:var(--panel-2);border-radius:2px;overflow:hidden;margin-top:5px}
@@ -459,7 +459,7 @@ button{font-family:var(--font-body);cursor:pointer}
     <div class="section-label"><span class="idx">04</span><h2>Tổng vay & tiền lãi</h2><div class="rule"></div></div>
     <div class="stats" id="loanCostStats"></div>
     <div class="frame" style="margin-top:14px">
-      <div class="loan-row cost head"><div>Khoản vay</div><div>Gốc vay</div><div>Gốc đã trả</div><div>Tổng lãi</div><div>% lãi / gốc</div><div>Lãi đã trả</div></div>
+      <div class="loan-row cost head"><div>Khoản vay</div><div>Gốc vay</div><div>Gốc đã trả</div><div>Tổng lãi</div><div>% lãi / gốc</div><div>Lãi / năm</div><div>Lãi đã trả</div></div>
       <div id="loanCostRows"></div>
     </div>
   </div>
@@ -1332,6 +1332,17 @@ function removeLoanLog(id){
   save();
   render();
 }
+/* Effective annual rate (monthly rate × 12) of a loan repaid in n equal monthly
+   payments: solve principal = payment × (1 − (1+r)^−n) / r for r by bisection. */
+function loanAnnualRate(principal, n, payment){
+  if(!(principal > 0) || !(n > 0) || n * payment <= principal) return 0;
+  let lo = 0, hi = 1;
+  for(let k = 0; k < 100; k++){
+    const r = (lo + hi) / 2;
+    if(payment * (1 - Math.pow(1 + r, -n)) / r > principal) lo = r; else hi = r;
+  }
+  return (lo + hi) / 2 * 12;
+}
 function renderLoanCost(){
   syncLoanLog();
   const rows = state.loanLog.map(a => {
@@ -1364,6 +1375,8 @@ function renderLoanCost(){
       <div class="mono" data-label="Gốc đã trả">${r.principal > 0 ? fmt(r.principalPaid) : '—'}</div>
       <div class="mono" data-label="Tổng lãi">${r.principal > 0 ? fmt(r.interest) : '—'}</div>
       <div class="mono" data-label="% lãi / gốc">${r.principal > 0 ? pct(r.interest, r.principal) + '%' : '—'}</div>
+      <div class="mono" data-label="Lãi / năm">${r.principal > 0 ? (() => { const apr = loanAnnualRate(r.principal, r.a.totalTerms, r.a.rate) * 100;
+        return `<span style="color:${apr >= 50 ? 'var(--red)' : apr >= 25 ? 'var(--amber)' : 'inherit'}">${apr.toLocaleString('vi-VN', {maximumFractionDigits: 1})}%</span>`; })() : '—'}</div>
       <div class="mono" data-label="Lãi đã trả">${r.principal > 0 ? fmt(r.interestPaid) : '—'}</div>
     </div>`).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
 }
