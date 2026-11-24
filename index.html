@@ -439,7 +439,7 @@ button{font-family:var(--font-body);cursor:pointer}
     <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
     <div class="frame">
       <div id="loanFacilities"></div>
-      <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Lãi / kỳ</div></div>
+      <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Trả / kỳ</div></div>
       <div id="loanRows"></div>
     </div>
 
@@ -455,8 +455,12 @@ button{font-family:var(--font-body);cursor:pointer}
     <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
     <div class="frame"><div class="wallet-grid" id="walletGrid"></div></div>
 
-    <div class="section-label"><span class="idx">04</span><h2>Giao dịch gần đây</h2><div class="rule"></div></div>
-    <div class="frame" id="txList"></div>
+    <div class="section-label"><span class="idx">04</span><h2>Tổng vay & tiền lãi</h2><div class="rule"></div></div>
+    <div class="stats" id="loanCostStats"></div>
+    <div class="frame" style="margin-top:14px">
+      <div class="loan-row head"><div>Khoản vay</div><div>Gốc vay</div><div>Tổng lãi</div><div>Lãi đã trả</div></div>
+      <div id="loanCostRows"></div>
+    </div>
   </div>
 
   <div id="tabExpenses" class="tabpage" style="display:none">
@@ -724,7 +728,8 @@ button{font-family:var(--font-body);cursor:pointer}
     <div id="accFieldsLoan" class="acc-fields">
       <div class="field"><label>Tổng số kỳ</label><input type="number" id="accTotalTerms" min="1"></div>
       <div class="field"><label>Số kỳ đã trả</label><input type="number" id="accPaidTerms" min="0"></div>
-      <div class="field"><label>Lãi mỗi kỳ (VNĐ)</label><input type="number" id="accRate" min="0"></div>
+      <div class="field"><label>Số tiền gốc đã vay (VNĐ)</label><input type="number" id="accPrincipal" min="0"></div>
+      <div class="field"><label>Số tiền trả mỗi kỳ — gốc + lãi (VNĐ)</label><input type="number" id="accRate" min="0"></div>
       <div class="field"><label>Ngày đến hạn kỳ tới</label><input type="date" id="accLoanDue"></div>
       <div class="field">
         <label>Hạn mức tín chấp chung (tuỳ chọn)</label>
@@ -856,6 +861,7 @@ function addDays(n){const d=new Date();d.setDate(d.getDate()+n);return localDate
 let state = null;
 
 async function save(){
+  syncLoanLog();
   const el = document.getElementById('saveStatus');
   if(el){ el.textContent = 'Đang lưu...'; el.className = 'save-status saving'; }
   try{
@@ -923,6 +929,8 @@ async function loadStateFromServer(){
   if(!state.dropship) state.dropship = [];
   if(!state.catMemory) state.catMemory = {};
   if(!state.aiCats) state.aiCats = {};
+  if(!state.loanLog) state.loanLog = [];
+  syncLoanLog();
   applyMigrations();
   return true;
 }
@@ -1021,7 +1029,7 @@ function render(){
   renderLoans();
   renderPayoffChart();
   renderWallets();
-  renderTx();
+  renderLoanCost();
   renderTxAccountOptions();
   renderExpenses();
   renderDaily();
@@ -1297,26 +1305,61 @@ function renderWallets(){
   `).join('') || '<div class="empty">Chưa có ví nào</div>';
 }
 
-function renderTx(){
-  const txs = [...state.transactions].sort((a,b)=> new Date(b.date)-new Date(a.date)).slice(0,12);
-  const tagLabel = {expense:'Chi tiêu', repay:'Trả nợ', borrow:'Vay mới'};
-  document.getElementById('txList').innerHTML = txs.map(t=>{
-    const acc = state.accounts.find(a=>a.id===t.accountId);
-    const sign = t.type==='repay' ? '−' : '+';
-    return `
-    <div class="tx-item">
-      <div class="tx-left">
-        <span class="tx-tag ${t.type}">${tagLabel[t.type]}</span>
-        <span>${acc ? acc.name : '—'}</span>
-        <span class="tx-note">${t.note || ''}</span>
-      </div>
-      <div style="display:flex;align-items:center">
-        <span class="tx-amt">${sign}${fmt(t.amount)}</span>
-        <button class="tx-edit" onclick="editTx('${t.id}')" aria-label="Sửa giao dịch">✎</button>
-        <button class="tx-del" onclick="deleteTx('${t.id}')" aria-label="Xóa giao dịch">×</button>
-      </div>
-    </div>`;
-  }).join('') || '<div class="empty">Chưa có giao dịch nào</div>';
+/* ---- borrowed principal vs. interest cost ----
+   Principal comes from loan.principal, or for older loans is read from the
+   name, e.g. "SEasy #1 (20tr, 05/06)" → 20,000,000. Interest is spread evenly
+   over the terms, so "interest paid" = total interest × paidTerms / totalTerms. */
+function loanPrincipal(a){
+  if(a.principal > 0) return a.principal;
+  const m = /\((\d+(?:[.,]\d+)?)\s*tr\b/i.exec(a.name || '');
+  return m ? Math.round(parseFloat(m[1].replace(',', '.')) * 1e6) : 0;
+}
+/* Permanent log of every loan ever added: a snapshot is refreshed from the live
+   account while it exists, and kept after the loan is paid off or deleted. */
+function syncLoanLog(){
+  if(!state.loanLog) state.loanLog = [];
+  state.accounts.filter(a => a.type === 'loan').forEach(a => {
+    let l = state.loanLog.find(x => x.id === a.id);
+    if(!l){ l = {id: a.id, addedAt: todayISO()}; state.loanLog.push(l); }
+    Object.assign(l, {name: a.name, principal: loanPrincipal(a), totalTerms: a.totalTerms,
+      paidTerms: a.paidTerms, rate: a.rate, removed: false});
+  });
+}
+function removeLoanLog(id){
+  if(!confirm('Xóa khoản vay này khỏi log? Nó sẽ không còn được tính vào tổng.')) return;
+  state.loanLog = state.loanLog.filter(l => l.id !== id);
+  save();
+  render();
+}
+function renderLoanCost(){
+  syncLoanLog();
+  const rows = state.loanLog.map(a => {
+    const principal = a.principal || 0;
+    const totalPay = a.totalTerms * a.rate;
+    const interest = principal > 0 ? Math.max(0, totalPay - principal) : 0;
+    const interestPaid = a.totalTerms > 0 ? interest * Math.min(a.paidTerms, a.totalTerms) / a.totalTerms : 0;
+    const done = a.removed || a.paidTerms >= a.totalTerms;
+    return {a, principal, totalPay, interest, interestPaid, done};
+  }).sort((x, y) => x.done - y.done);
+  const known = rows.filter(r => r.principal > 0);
+  const sum = k => known.reduce((s, r) => s + r[k], 0);
+  const totalPrincipal = sum('principal'), totalInterest = sum('interest'), interestPaid = sum('interestPaid');
+  const pctOfPrincipal = totalPrincipal > 0 ? (totalInterest / totalPrincipal * 100).toLocaleString('vi-VN', {maximumFractionDigits: 1}) : '0';
+
+  document.getElementById('loanCostStats').innerHTML = `
+    <div class="stat warn" style="cursor:default"><div class="lbl">Tổng tiền đã vay</div><div class="val">${fmt(totalPrincipal)}</div></div>
+    <div class="stat neg" style="cursor:default"><div class="lbl">Tổng lãi phải trả (${pctOfPrincipal}% gốc)</div><div class="val">${fmt(totalInterest)}</div></div>
+    <div class="stat neg" style="cursor:default"><div class="lbl">Lãi đã trả đến nay</div><div class="val">${fmt(interestPaid)}</div></div>
+    <div class="stat" style="cursor:default"><div class="lbl">Tổng phải trả (gốc + lãi)</div><div class="val">${fmt(totalPrincipal + totalInterest)}</div></div>
+  `;
+
+  document.getElementById('loanCostRows').innerHTML = rows.map(r => `
+    <div class="loan-row"${r.a.removed ? '' : ` onclick="openAccountModal('loan','${r.a.id}')"`} style="${r.done ? 'opacity:.6' : ''}">
+      <div class="loan-name">${r.a.name}${r.done ? ' <span class="tx-tag repay">Đã trả xong</span>' : ''}${r.a.removed ? ` <button class="tx-del" onclick="event.stopPropagation(); removeLoanLog('${r.a.id}')" aria-label="Xóa khỏi log" title="Xóa khỏi log">×</button>` : ''}</div>
+      <div class="mono" data-label="Gốc vay">${r.principal > 0 ? fmt(r.principal) : '<span style="color:var(--amber)">Chưa nhập gốc</span>'}</div>
+      <div class="mono" data-label="Tổng lãi">${r.principal > 0 ? fmt(r.interest) : '—'}</div>
+      <div class="mono" data-label="Lãi đã trả">${r.principal > 0 ? fmt(r.interestPaid) : '—'}</div>
+    </div>`).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
 }
 
 /* ---- fixed recurring expenses (monthly / quarterly / yearly) ---- */
@@ -2250,6 +2293,7 @@ function openAccountModal(type, id){
     document.getElementById('accTotalTerms').value = acc ? acc.totalTerms : '';
     document.getElementById('accPaidTerms').value = acc ? acc.paidTerms : '';
     document.getElementById('accRate').value = acc ? acc.rate : '';
+    document.getElementById('accPrincipal').value = acc ? (loanPrincipal(acc) || '') : '';
     document.getElementById('accLoanDue').value = acc ? acc.due : '';
     document.getElementById('accFacilityName').value = acc ? (acc.facilityName || '') : '';
     document.getElementById('accFacilityLimit').value = acc ? (acc.facilityLimit ?? '') : '';
@@ -2287,6 +2331,7 @@ function submitAccount(){
       totalTerms: parseFloat(document.getElementById('accTotalTerms').value) || 1,
       paidTerms: parseFloat(document.getElementById('accPaidTerms').value) || 0,
       rate: parseFloat(document.getElementById('accRate').value) || 0,
+      principal: parseFloat(document.getElementById('accPrincipal').value) || 0,
       due: document.getElementById('accLoanDue').value || todayISO()};
     acc.facilityName = facilityName || undefined;
     acc.facilityLimit = facilityName ? (parseFloat(document.getElementById('accFacilityLimit').value) || 0) : undefined;
@@ -2308,6 +2353,9 @@ function submitAccount(){
 function deleteAccountBtn(){
   if(!editingAccountId) return;
   if(!confirm('Xóa nguồn tiền này? Các giao dịch liên quan vẫn được giữ lại trong lịch sử.')) return;
+  // a deleted loan stays in the loan log; deleting usually means it's settled
+  const logged = (state.loanLog || []).find(l => l.id === editingAccountId);
+  if(logged){ logged.removed = true; logged.paidTerms = logged.totalTerms; }
   state.accounts = state.accounts.filter(a=>a.id!==editingAccountId);
   save();
   render();
