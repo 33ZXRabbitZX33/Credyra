@@ -425,7 +425,8 @@ button{font-family:var(--font-body);cursor:pointer}
     <button class="navtab" data-tab="expenses" onclick="switchTab('expenses')">Chi phí cố định</button>
     <button class="navtab" data-tab="daily" onclick="switchTab('daily')">Chi tiêu</button>
     <button class="navtab" data-tab="chart" onclick="switchTab('chart')">Biểu đồ</button>
-    <button class="navtab" data-tab="yt" onclick="switchTab('yt')">YouTube</button>
+    <button class="navtab" data-tab="yt" onclick="switchTab('yt')">YouTube VN</button>
+    <button class="navtab" data-tab="yu" onclick="switchTab('yu')">YouTube US</button>
     <button class="navtab" data-tab="ds" onclick="switchTab('ds')">Dropship</button>
   </div>
 
@@ -565,7 +566,7 @@ button{font-family:var(--font-body);cursor:pointer}
 
     <div class="stats" id="ytStatGrid" style="margin-top:14px"></div>
 
-    <div class="section-label"><span class="idx">02</span><h2 id="ytMonthTitle">YouTube tháng</h2><div class="rule"></div></div>
+    <div class="section-label"><span class="idx">02</span><h2 id="ytMonthTitle">YouTube VN tháng</h2><div class="rule"></div></div>
     <div class="frame">
       <div class="tabs" id="ytTypeTabs">
         <div class="tab active" data-type="thu" onclick="bizSetType('yt','thu')">Thu</div>
@@ -588,6 +589,44 @@ button{font-family:var(--font-body);cursor:pointer}
     </div>
 
     <div class="frame" id="ytList" style="margin-top:14px"></div>
+  </div>
+
+  <div id="tabYu" class="tabpage" style="display:none">
+    <div class="section-label"><span class="idx">01</span><h2>Chọn tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="year-nav">
+        <button class="btn small ghost" onclick="bizShiftYear('yu',-1)">‹</button>
+        <span id="yuYearLabel"></span>
+        <button class="btn small ghost" onclick="bizShiftYear('yu',1)">›</button>
+      </div>
+      <div class="month-grid" id="yuMonthGrid"></div>
+    </div>
+
+    <div class="stats" id="yuStatGrid" style="margin-top:14px"></div>
+
+    <div class="section-label"><span class="idx">02</span><h2 id="yuMonthTitle">YouTube US tháng</h2><div class="rule"></div></div>
+    <div class="frame">
+      <div class="tabs" id="yuTypeTabs">
+        <div class="tab active" data-type="thu" onclick="bizSetType('yu','thu')">Thu</div>
+        <div class="tab" data-type="chi" onclick="bizSetType('yu','chi')">Chi</div>
+      </div>
+      <div class="field">
+        <label>Nội dung</label>
+        <input type="text" id="yuDesc" list="yuDescList" placeholder="VD: AdSense tháng 9, thuê voice-over, VPN..." onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('yu');}">
+        <datalist id="yuDescList"></datalist>
+      </div>
+      <div class="field">
+        <label>Số tiền (VNĐ)</label>
+        <input type="number" id="yuAmount" min="0" onkeydown="if(event.key==='Enter'){event.preventDefault();bizSubmit('yu');}">
+      </div>
+      <div class="err" id="yuErr">Nhập đầy đủ nội dung và số tiền hợp lệ</div>
+      <div class="btn-row">
+        <button class="btn ghost" id="yuCancelBtn" onclick="bizCancelEdit('yu')" style="display:none">Hủy</button>
+        <button class="btn primary" id="yuSubmitBtn" onclick="bizSubmit('yu')">+ Thêm</button>
+      </div>
+    </div>
+
+    <div class="frame" id="yuList" style="margin-top:14px"></div>
   </div>
 
   <div id="tabDs" class="tabpage" style="display:none">
@@ -806,6 +845,7 @@ function seed(){
     expenses: [],
     dailyExpenses: [],
     youtube: [],
+    youtubeUS: [],
     dropship: [],
     catMemory: {},
     aiCats: {}
@@ -879,6 +919,7 @@ async function loadStateFromServer(){
   if(!state.expenses) state.expenses = [];
   if(!state.dailyExpenses) state.dailyExpenses = [];
   if(!state.youtube) state.youtube = [];
+  if(!state.youtubeUS) state.youtubeUS = [];
   if(!state.dropship) state.dropship = [];
   if(!state.catMemory) state.catMemory = {};
   if(!state.aiCats) state.aiCats = {};
@@ -986,6 +1027,7 @@ function render(){
   renderDaily();
   renderDash();
   renderBiz('yt');
+  renderBiz('yu');
   renderBiz('ds');
 }
 
@@ -1932,11 +1974,13 @@ function renderDash(){
 
 /* ---- business ledgers (thu/chi note-books, e.g. YouTube / Dropship) ---- */
 const BIZ = {
-  yt: { stateKey: 'youtube', label: 'YouTube' },
+  yt: { stateKey: 'youtube', label: 'YouTube VN' },
+  yu: { stateKey: 'youtubeUS', label: 'YouTube US' },
   ds: { stateKey: 'dropship', label: 'Dropship' },
 };
 const bizState = {
   yt: { viewYear: null, selectedMonth: null, editingId: null, currentType: 'thu' },
+  yu: { viewYear: null, selectedMonth: null, editingId: null, currentType: 'thu' },
   ds: { viewYear: null, selectedMonth: null, editingId: null, currentType: 'thu' },
 };
 
