@@ -1163,6 +1163,32 @@ function openStatModal(key){
   document.getElementById('statDetailList').innerHTML = rowsHtml + `<div class="detail-total"><span>Tổng</span><span>${fmt(total)}</span></div>`;
   document.getElementById('statOverlay').classList.add('open');
 }
+/* Read-only details of a loan that only lives in the log (paid off / deleted). */
+function openLoanLogDetail(id){
+  const a = (state.loanLog || []).find(l => l.id === id);
+  if(!a) return;
+  const principal = a.principal || 0;
+  const totalPay = loanTotalPay(a);
+  const interest = principal > 0 ? Math.max(0, totalPay - principal) : 0;
+  const num = v => v.toLocaleString('vi-VN', {maximumFractionDigits: 2});
+  const rows = [
+    ['Gốc vay', principal > 0 ? fmt(principal) : '—'],
+    ['Kỳ hạn', `${a.totalTerms} tháng`],
+    ['Đã trả', `${Math.min(a.paidTerms, a.totalTerms)}/${a.totalTerms} kỳ`],
+    ['Trả mỗi kỳ', fmt(a.rate)],
+    ...(a.lastRate > 0 && a.lastRate !== a.rate ? [['Kỳ cuối', fmt(a.lastRate)]] : []),
+    ['Tổng lãi', principal > 0 ? fmt(interest) : '—'],
+    ['% lãi / gốc', principal > 0 ? num(interest / principal * 100) + '%' : '—'],
+    ['Lãi / tháng (thực tế)', principal > 0 ? num(loanAnnualRate(principal, a) * 100 / 12) + '%' : '—'],
+    ['Lãi / năm', principal > 0 ? num(loanAnnualRate(principal, a) * 100) + '%' : '—'],
+    ['Ngày thêm vào app', a.addedAt || '—'],
+  ];
+  document.getElementById('statModalTitle').textContent = a.name;
+  document.getElementById('statDetailList').innerHTML = rows.map(([k, v]) =>
+    `<div class="detail-row"><span class="dname">${k}</span><span class="dval">${v}</span></div>`).join('')
+    + `<div class="detail-total"><span>Tổng đã/phải trả</span><span>${fmt(totalPay)}</span></div>`;
+  document.getElementById('statOverlay').classList.add('open');
+}
 function closeStatModal(){ document.getElementById('statOverlay').classList.remove('open'); }
 
 function ringColor(availablePct){
@@ -1402,7 +1428,7 @@ function renderLoanCost(){
   `;
 
   document.getElementById('loanCostRows').innerHTML = rows.map(r => `
-    <div class="loan-row cost"${r.a.removed ? '' : ` onclick="openAccountModal('loan','${r.a.id}')"`} style="${r.done ? 'opacity:.6' : ''}">
+    <div class="loan-row cost" onclick="${r.a.removed ? `openLoanLogDetail('${r.a.id}')` : `openAccountModal('loan','${r.a.id}')`}" style="${r.done ? 'opacity:.6' : ''}">
       <div class="loan-name">${r.a.name}${r.done ? ' <span class="tx-tag repay">Đã trả xong</span>' : ''}${r.a.removed ? ` <button class="tx-del" onclick="event.stopPropagation(); removeLoanLog('${r.a.id}')" aria-label="Xóa khỏi log" title="Xóa khỏi log">×</button>` : ''}</div>
       <div class="mono" data-label="Gốc vay">${r.principal > 0 ? fmt(r.principal) : '<span style="color:var(--amber)">Chưa nhập gốc</span>'}</div>
       <div class="mono" data-label="Gốc đã trả">${r.principal > 0 ? fmt(r.principalPaid) : '—'}</div>
