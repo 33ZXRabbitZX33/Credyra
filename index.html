@@ -829,7 +829,7 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:6, rate:3993010, due:'2026-10-05',
+      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:6, rate:3993010, lastRate:4009020, due:'2026-10-05',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
       {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:3, rate:199651, due:'2026-10-10',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
@@ -922,6 +922,12 @@ function applyMigrations(){
     if(logged){ logged.paidTerms = logged.totalTerms; logged.removed = true; }
     state.accounts = state.accounts.filter(a => a.id !== 'a6');
     state.migrations.push('seasy1-paid-off');
+    changed = true;
+  }
+  if(!state.migrations.includes('seasy1-last-rate')){
+    // SEasy #1's final term (6/6) was 4.009.020đ, not the usual 3.993.010đ
+    [...state.accounts, ...(state.loanLog || [])].filter(a => a.id === 'a6').forEach(a => { a.lastRate = 4009020; });
+    state.migrations.push('seasy1-last-rate');
     changed = true;
   }
   if(changed) save();
@@ -1070,7 +1076,7 @@ function renderStats(){
 
   const cash = wallets.reduce((s,a)=>s+a.balance,0);
   const creditDebt = credits.reduce((s,a)=>s+a.used,0);
-  const loanDebt = loans.reduce((s,a)=>s+(a.totalTerms-a.paidTerms)*a.rate,0);
+  const loanDebt = loans.reduce((s,a)=>s+loanRemaining(a),0);
   const totalDebt = creditDebt + loanDebt;
   const netWorth = cash - totalDebt;
   const availableCredit = credits.reduce((s,a)=>s+(a.limit-a.used),0);
@@ -1079,7 +1085,7 @@ function renderStats(){
   // known per-period amounts for credit/BNPL accounts that have a schedule
   const loanDueSoon = loans
     .filter(a=>daysUntil(a.due)<=7 && daysUntil(a.due)>=0)
-    .reduce((s,a)=>s+a.rate, 0);
+    .reduce((s,a)=>s+loanTermAmount(a, a.paidTerms), 0);
   const creditDueSoon = credits.reduce((s,a)=>{
     if(!a.installments || !a.installments.length) return s;
     return s + a.installments
@@ -1108,7 +1114,7 @@ function statBreakdown(key){
   if(key==='networth'){
     const cash = wallets.reduce((s,a)=>s+a.balance,0);
     const creditDebt = credits.reduce((s,a)=>s+a.used,0);
-    const loanDebt = loans.reduce((s,a)=>s+(a.totalTerms-a.paidTerms)*a.rate,0);
+    const loanDebt = loans.reduce((s,a)=>s+loanRemaining(a),0);
     const rows = [
       {name:'Tiền mặt (tổng ví)', val:cash},
       {name:'Nợ thẻ tín dụng / BNPL', val:-creditDebt},
@@ -1119,7 +1125,7 @@ function statBreakdown(key){
   if(key==='debt'){
     const rows = [
       ...credits.filter(a=>a.used>0).map(a=>({name:a.name, val:a.used})),
-      ...loans.map(a=>({name:a.name, val:(a.totalTerms-a.paidTerms)*a.rate})),
+      ...loans.map(a=>({name:a.name, val:loanRemaining(a)})),
     ];
     return {title:'Tổng nợ', rows, total: rows.reduce((s,r)=>s+r.val,0)};
   }
@@ -1135,7 +1141,7 @@ function statBreakdown(key){
     const rows = [];
     loans.forEach(a=>{
       const d = daysUntil(a.due);
-      if(d<=7 && d>=0) rows.push({name:`${a.name} (kỳ tới)`, val:a.rate});
+      if(d<=7 && d>=0) rows.push({name:`${a.name} (kỳ tới)`, val:loanTermAmount(a, a.paidTerms)});
     });
     credits.forEach(a=>{
       (a.installments||[]).forEach(i=>{
@@ -1245,7 +1251,7 @@ function loanPayoffSchedule(){
     let y = y0, m = m0 - 1;
     for(let i = 0; i < remaining; i++){
       const key = `${y}-${String(m+1).padStart(2,'0')}`;
-      monthTotals[key] = (monthTotals[key] || 0) + loan.rate;
+      monthTotals[key] = (monthTotals[key] || 0) + loanTermAmount(loan, loan.paidTerms + i);
       m += 1;
       if(m >= 12){ m = 0; y += 1; }
     }
@@ -1333,7 +1339,7 @@ function syncLoanLog(){
     let l = state.loanLog.find(x => x.id === a.id);
     if(!l){ l = {id: a.id, addedAt: todayISO()}; state.loanLog.push(l); }
     Object.assign(l, {name: a.name, principal: loanPrincipal(a), totalTerms: a.totalTerms,
-      paidTerms: a.paidTerms, rate: a.rate, removed: false});
+      paidTerms: a.paidTerms, rate: a.rate, lastRate: a.lastRate || 0, removed: false});
   });
 }
 function removeLoanLog(id){
@@ -1342,14 +1348,31 @@ function removeLoanLog(id){
   save();
   render();
 }
-/* Effective annual rate (monthly rate × 12) of a loan repaid in n equal monthly
-   payments: solve principal = payment × (1 − (1+r)^−n) / r for r by bisection. */
-function loanAnnualRate(principal, n, payment){
-  if(!(principal > 0) || !(n > 0) || n * payment <= principal) return 0;
+/* Amount due for term k (0-based). Lenders often round so the final term
+   differs slightly; that is stored as lastRate. */
+function loanTermAmount(a, k){
+  return (k === a.totalTerms - 1 && a.lastRate > 0) ? a.lastRate : a.rate;
+}
+function loanRemaining(a){
+  let s = 0;
+  for(let k = a.paidTerms; k < a.totalTerms; k++) s += loanTermAmount(a, k);
+  return s;
+}
+function loanTotalPay(a){
+  let s = 0;
+  for(let k = 0; k < a.totalTerms; k++) s += loanTermAmount(a, k);
+  return s;
+}
+/* Effective annual rate (monthly rate × 12): solve principal = Σ payment_k / (1+r)^k
+   for r by bisection. */
+function loanAnnualRate(principal, a){
+  const n = a.totalTerms;
+  if(!(principal > 0) || !(n > 0) || loanTotalPay(a) <= principal) return 0;
+  const pv = r => { let s = 0; for(let k = 0; k < n; k++) s += loanTermAmount(a, k) / Math.pow(1 + r, k + 1); return s; };
   let lo = 0, hi = 1;
   for(let k = 0; k < 100; k++){
     const r = (lo + hi) / 2;
-    if(payment * (1 - Math.pow(1 + r, -n)) / r > principal) lo = r; else hi = r;
+    if(pv(r) > principal) lo = r; else hi = r;
   }
   return (lo + hi) / 2 * 12;
 }
@@ -1357,7 +1380,7 @@ function renderLoanCost(){
   syncLoanLog();
   const rows = state.loanLog.map(a => {
     const principal = a.principal || 0;
-    const totalPay = a.totalTerms * a.rate;
+    const totalPay = loanTotalPay(a);
     const interest = principal > 0 ? Math.max(0, totalPay - principal) : 0;
     const interestPaid = a.totalTerms > 0 ? interest * Math.min(a.paidTerms, a.totalTerms) / a.totalTerms : 0;
     const principalPaid = a.totalTerms > 0 ? principal * Math.min(a.paidTerms, a.totalTerms) / a.totalTerms : 0;
@@ -1385,7 +1408,7 @@ function renderLoanCost(){
       <div class="mono" data-label="Gốc đã trả">${r.principal > 0 ? fmt(r.principalPaid) : '—'}</div>
       <div class="mono" data-label="Tổng lãi">${r.principal > 0 ? fmt(r.interest) : '—'}</div>
       <div class="mono" data-label="% lãi / gốc">${r.principal > 0 ? pct(r.interest, r.principal) + '%' : '—'}</div>
-      <div class="mono" data-label="Lãi / năm">${r.principal > 0 ? (() => { const apr = loanAnnualRate(r.principal, r.a.totalTerms, r.a.rate) * 100;
+      <div class="mono" data-label="Lãi / năm">${r.principal > 0 ? (() => { const apr = loanAnnualRate(r.principal, r.a) * 100;
         return `<span style="color:${apr >= 50 ? 'var(--red)' : apr >= 25 ? 'var(--amber)' : 'inherit'}">${apr.toLocaleString('vi-VN', {maximumFractionDigits: 1})}%</span>`; })() : '—'}</div>
       <div class="mono" data-label="Lãi đã trả">${r.principal > 0 ? fmt(r.interestPaid) : '—'}</div>
     </div>`).join('') || '<div class="empty">Chưa có khoản vay nào</div>';
