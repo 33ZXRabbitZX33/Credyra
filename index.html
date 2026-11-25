@@ -829,7 +829,7 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:3, rate:3993010, due:'2026-10-05',
+      {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:6, rate:3993010, due:'2026-10-05',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
       {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:3, rate:199651, due:'2026-10-10',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
@@ -912,6 +912,16 @@ function applyMigrations(){
         rate:5099000, due:'2026-12-25'});
     }
     state.migrations.push('add-tinvay');
+    changed = true;
+  }
+  if(!state.migrations.includes('seasy1-paid-off')){
+    // SEasy #1 settled (6/6 kỳ, last on 05/12/2026): keep it in the loan log
+    // as paid off and drop it from active loans, same as deleting a loan.
+    syncLoanLog();
+    const logged = state.loanLog.find(l => l.id === 'a6');
+    if(logged){ logged.paidTerms = logged.totalTerms; logged.removed = true; }
+    state.accounts = state.accounts.filter(a => a.id !== 'a6');
+    state.migrations.push('seasy1-paid-off');
     changed = true;
   }
   if(changed) save();
