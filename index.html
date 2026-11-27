@@ -434,10 +434,13 @@ button{font-family:var(--font-body);cursor:pointer}
   <div id="tabDashboard" class="tabpage">
     <div class="stats" id="statGrid"></div>
 
-    <div class="section-label"><span class="idx">01</span><h2>Thẻ tín dụng & ví trả sau</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit')">+ Thêm thẻ</button></div>
+    <div class="section-label"><span class="idx">01</span><h2>Thẻ tín dụng</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit')">+ Thêm thẻ</button></div>
     <div class="frame"><div class="credit-grid" id="creditGrid"></div></div>
 
-    <div class="section-label"><span class="idx">02</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
+    <div class="section-label"><span class="idx">02</span><h2>Ví trả sau</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('credit', null, true)">+ Thêm ví trả sau</button></div>
+    <div class="frame"><div class="credit-grid" id="paylaterGrid"></div></div>
+
+    <div class="section-label"><span class="idx">03</span><h2>Khoản vay trả góp</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('loan')">+ Thêm khoản vay</button></div>
     <div class="frame">
       <div id="loanFacilities"></div>
       <div class="loan-row head"><div>Khoản vay</div><div>Tiến độ kỳ</div><div>Kỳ tiếp theo</div><div>Trả / kỳ</div></div>
@@ -453,10 +456,10 @@ button{font-family:var(--font-body);cursor:pointer}
       <div class="payoff-chart-scroll"><div class="payoff-chart" id="payoffChart"></div></div>
     </div>
 
-    <div class="section-label"><span class="idx">03</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
+    <div class="section-label"><span class="idx">04</span><h2>Ví / tài khoản</h2><div class="rule"></div><button class="btn small ghost" onclick="openAccountModal('wallet')">+ Thêm ví</button></div>
     <div class="frame"><div class="wallet-grid" id="walletGrid"></div></div>
 
-    <div class="section-label"><span class="idx">04</span><h2>Tổng vay & tiền lãi</h2><div class="rule"></div></div>
+    <div class="section-label"><span class="idx">05</span><h2>Tổng vay & tiền lãi</h2><div class="rule"></div></div>
     <div class="stats" id="loanCostStats"></div>
     <div class="frame" style="margin-top:14px">
       <div class="loan-row cost head"><div>Khoản vay</div><div>Gốc vay</div><div>Gốc đã trả</div><div>Tổng lãi</div><div>% lãi / gốc</div><div>Lãi / năm</div><div>Lãi đã trả</div></div>
@@ -825,11 +828,11 @@ function seed(){
       {id:'a2', type:'credit', name:'VIB Credit', limit:23000000, used:0, due:addDays(6)},
       {id:'a3', type:'credit', name:'Tech Credit', limit:21000000, used:9000000, due:addDays(14)},
       {id:'a4', type:'credit', name:'Momo Credit', limit:6000000, used:0, due:addDays(3)},
-      {id:'a5', type:'credit', name:'SPayLater', limit:21000000, used:6658668, due:'2026-09-05', installments:[
+      {id:'a5', type:'credit', paylater:true, name:'SPayLater', limit:21000000, used:6658668, due:'2026-09-05', installments:[
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
-      {id:'a18', type:'credit', name:'TikTok PayLater', limit:10000000, used:0, due:''},
+      {id:'a18', type:'credit', paylater:true, name:'TikTok PayLater', limit:10000000, used:0, due:''},
       {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:6, rate:3993010, lastRate:4009020, due:'2026-10-05',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
       {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:3, rate:199651, due:'2026-10-10',
@@ -942,6 +945,14 @@ function applyMigrations(){
       if(i >= 0) state.accounts.splice(i + 1, 0, acc); else state.accounts.push(acc);
     }
     state.migrations.push('add-tiktok-paylater');
+    changed = true;
+  }
+  if(!state.migrations.includes('split-paylater')){
+    // pay-later wallets get their own dashboard section, apart from credit cards
+    state.accounts
+      .filter(a => a.type === 'credit' && (a.id === 'a5' || a.id === 'a18' || /pay\s*later/i.test(a.name || '')))
+      .forEach(a => { a.paylater = true; });
+    state.migrations.push('split-paylater');
     changed = true;
   }
   if(changed) save();
@@ -1212,8 +1223,10 @@ function ringColor(availablePct){
 }
 
 function renderCredit(){
+  // two kinds of credit, shown in separate sections: bank credit cards, and
+  // pay-later (BNPL) wallets that can only pay for purchases on their platform
   const credits = state.accounts.filter(a=>a.type==='credit');
-  document.getElementById('creditGrid').innerHTML = credits.map(a=>{
+  const card = a=>{
     const pct = Math.max(0, Math.min(100, Math.round(((a.limit - a.used)/a.limit)*100)));
     const r = 26, c = 2*Math.PI*r;
     const offset = c - (pct/100)*c;
@@ -1244,7 +1257,11 @@ function renderCredit(){
         ${instHtml}
       </div>
     </div>`;
-  }).join('') || '<div class="empty">Chưa có thẻ nào</div>';
+  };
+  document.getElementById('creditGrid').innerHTML =
+    credits.filter(a=>!a.paylater).map(card).join('') || '<div class="empty">Chưa có thẻ nào</div>';
+  document.getElementById('paylaterGrid').innerHTML =
+    credits.filter(a=>a.paylater).map(card).join('') || '<div class="empty">Chưa có ví trả sau nào</div>';
 }
 
 function renderLoans(){
@@ -2362,14 +2379,17 @@ function addInstallmentRow(){ renderInstallmentRow(null); }
 /* ---- account modal ---- */
 let currentAccType = 'credit';
 let editingAccountId = null;
-function openAccountModal(type, id){
+let currentAccPaylater = false;   // credit accounts only: pay-later wallet vs credit card
+function openAccountModal(type, id, paylater){
   currentAccType = type;
   editingAccountId = id || null;
   const acc = editingAccountId ? state.accounts.find(a=>a.id===editingAccountId) : null;
+  currentAccPaylater = type==='credit' && !!(acc ? acc.paylater : paylater);
 
+  const creditLabel = currentAccPaylater ? 'ví trả sau' : 'thẻ tín dụng';
   document.getElementById('accModalTitle').textContent = acc
-    ? (type==='credit' ? 'Sửa thẻ / ví trả sau' : type==='loan' ? 'Sửa khoản vay trả góp' : 'Sửa ví')
-    : (type==='credit' ? 'Thêm thẻ / ví trả sau' : type==='loan' ? 'Thêm khoản vay trả góp' : 'Thêm ví');
+    ? (type==='credit' ? 'Sửa ' + creditLabel : type==='loan' ? 'Sửa khoản vay trả góp' : 'Sửa ví')
+    : (type==='credit' ? 'Thêm ' + creditLabel : type==='loan' ? 'Thêm khoản vay trả góp' : 'Thêm ví');
   document.querySelectorAll('.acc-fields').forEach(f=>f.style.display='none');
   document.getElementById('accFields' + type.charAt(0).toUpperCase() + type.slice(1)).style.display = 'block';
   document.getElementById('accDeleteBtn').style.display = acc ? 'block' : 'none';
@@ -2418,6 +2438,7 @@ function submitAccount(){
       used: parseFloat(document.getElementById('accUsed').value) || 0,
       due: document.getElementById('accDue').value,
       installments};
+    if(currentAccPaylater) acc.paylater = true;
   } else if(currentAccType==='loan'){
     const facilityName = document.getElementById('accFacilityName').value.trim();
     acc = {id, type:'loan', name,
