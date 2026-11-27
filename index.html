@@ -829,6 +829,7 @@ function seed(){
         {label:'Th09', amount:3340543, due:'2026-09-05'},
         {label:'Th10', amount:3340545, due:'2026-10-05'},
       ]},
+      {id:'a18', type:'credit', name:'TikTok PayLater', limit:10000000, used:0, due:''},
       {id:'a6', type:'loan', name:'SEasy #1 (20tr, 05/06)', totalTerms:6, paidTerms:6, rate:3993010, lastRate:4009020, due:'2026-10-05',
         facilityName:'SEasy', facilityLimit:50000000, facilityAvailable:44254},
       {id:'a7', type:'loan', name:'SEasy #2 (1tr, 10/06)', totalTerms:6, paidTerms:3, rate:199651, due:'2026-10-10',
@@ -928,6 +929,19 @@ function applyMigrations(){
     // SEasy #1's final term (6/6) was 4.009.020đ, not the usual 3.993.010đ
     [...state.accounts, ...(state.loanLog || [])].filter(a => a.id === 'a6').forEach(a => { a.lastRate = 4009020; });
     state.migrations.push('seasy1-last-rate');
+    changed = true;
+  }
+  if(!state.migrations.includes('add-tiktok-paylater')){
+    // BNPL wallet like SPayLater: only usable for purchases on TikTok Shop.
+    // No statement yet, so no due date until the first purchase is billed.
+    if(!state.accounts.some(a=>a.id==='a18')){
+      const acc = {id:'a18', type:'credit', name:'TikTok PayLater', limit:10000000, used:0, due:''};
+      // sit right after SPayLater, else after the last credit account
+      let i = state.accounts.findIndex(a=>a.id==='a5');
+      if(i < 0) i = state.accounts.map(a=>a.type).lastIndexOf('credit');
+      if(i >= 0) state.accounts.splice(i + 1, 0, acc); else state.accounts.push(acc);
+    }
+    state.migrations.push('add-tiktok-paylater');
     changed = true;
   }
   if(changed) save();
@@ -1204,8 +1218,9 @@ function renderCredit(){
     const r = 26, c = 2*Math.PI*r;
     const offset = c - (pct/100)*c;
     const color = ringColor(pct);
-    const d = daysUntil(nearestDue(a));
-    const dueLabel = d < 0 ? 'Đã quá hạn' : d === 0 ? 'Đến hạn hôm nay' : `Còn ${d} ngày`;
+    const due = nearestDue(a);
+    const d = due ? daysUntil(due) : null;
+    const dueLabel = d === null ? 'Chưa có kỳ thanh toán' : d < 0 ? 'Đã quá hạn' : d === 0 ? 'Đến hạn hôm nay' : `Còn ${d} ngày`;
     const instHtml = (a.installments && a.installments.length) ? `
       <div class="inst-list">${[...a.installments].sort((x,y)=>new Date(x.due)-new Date(y.due)).map(i=>{
         const di = daysUntil(i.due);
@@ -2365,7 +2380,7 @@ function openAccountModal(type, id){
   if(type==='credit'){
     document.getElementById('accLimit').value = acc ? acc.limit : '';
     document.getElementById('accUsed').value = acc ? acc.used : '';
-    document.getElementById('accDue').value = acc ? acc.due : '';
+    document.getElementById('accDue').value = acc ? (acc.due || '') : '';
     (acc && acc.installments ? acc.installments : []).forEach(renderInstallmentRow);
   } else if(type==='loan'){
     document.getElementById('accTotalTerms').value = acc ? acc.totalTerms : '';
@@ -2401,7 +2416,7 @@ function submitAccount(){
     acc = {id, type:'credit', name,
       limit: parseFloat(document.getElementById('accLimit').value) || 0,
       used: parseFloat(document.getElementById('accUsed').value) || 0,
-      due: document.getElementById('accDue').value || todayISO(),
+      due: document.getElementById('accDue').value,
       installments};
   } else if(currentAccType==='loan'){
     const facilityName = document.getElementById('accFacilityName').value.trim();
